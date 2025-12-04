@@ -149,7 +149,7 @@
 <body>
   <div class="container">
     <h1>AI Resume Tailor</h1>
-    <p class="description">Paste your job posting and resume summary. The app will rewrite your About Me and reorder experiences to match the role.</p>
+      <p class="description">Paste your job posting and resume summary. The app will rewrite your About Me, reorder experiences, and draft a friendly cover letter for the role.</p>
 
     <form id="resume-form">
       <div>
@@ -189,7 +189,15 @@
         </div>
         <div id="experience-output" class="result-text">Awaiting tailored experiences...</div>
       </div>
+       <div class="card">
+        <div class="actions" style="justify-content: space-between;">
+          <h2>Cover Letter</h2>
+          <button class="secondary" type="button" data-copy-target="cover-output">Copy</button>
+        </div>
+        <div id="cover-output" class="result-text">Cover letter draft will appear here...</div>
+      </div>
     </div>
+
 
     <footer>OpenAI-powered resume tailoring. Keep content honest; use responsibly.</footer>
   </div>
@@ -200,6 +208,7 @@
     const submitBtn = document.getElementById('submit-btn');
     const aboutOutput = document.getElementById('about-output');
     const experienceOutput = document.getElementById('experience-output');
+    const coverOutput = document.getElementById('cover-output');
 
     async function copyText(targetId) {
       const text = document.getElementById(targetId).innerText;
@@ -245,6 +254,7 @@
         const data = await response.json();
         aboutOutput.textContent = data.aboutMe || 'No rewrite returned.';
         experienceOutput.textContent = Array.isArray(data.experiences) ? data.experiences.join('\n\n') : 'No experience data returned.';
+        coverOutput.textContent = data.coverLetter || 'No cover letter returned.';
         statusEl.textContent = 'Done! Review and copy the tailored text below.';
       } catch (error) {
         console.error(error);
