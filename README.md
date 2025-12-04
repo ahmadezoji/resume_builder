@@ -13,4 +13,5 @@ Align my resume related to jobs
    - Your current "About Me"
    - Your experiences (separate entries with blank lines)
 
-The page will call OpenAI to rewrite your summary toward the role, reorder the most relevant experiences to the top, draft a friendly cover letter that references the job description, and lightly adjust phrasing to match the posting. You can copy the generated sections to update your resume.
+
+ThThe page will call OpenAI to rewrite your summary toward the role, reorder the most relevant experiences to the top, and lightly adjust phrasing to match the posting. You can copy the generated sections to update your resume.

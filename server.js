@@ -85,14 +85,14 @@ async function handleTailorRequest(req, res) {
       return;
     }
 
-    const systemPrompt = `You are a resume tailoring assistant. Given a target job and a resume, you:\n- Rewrite the candidate's "About me" to align with the job title and description while staying truthful.\n- Reorder experiences so that the most relevant items appear first.\n- Lightly edit experience text to highlight skills the job requires without inventing facts.\n- Write a concise, friendly cover letter that sounds human, references the job title, and mentions specific requirements or concepts from the description the candidate has addressed.\nReturn a compact JSON object with an "aboutMe" string, an ordered "experiences" array of strings, and a "coverLetter" string. Do not include explanations.`;
+    const systemPrompt = `You are a resume tailoring assistant. Given a target job and a resume, you:\n- Rewrite the candidate's "About me" to align with the job title and description while staying truthful.\n- Reorder experiences so that the most relevant items appear first.\n- Lightly edit experience text to highlight skills the job requires without inventing facts.\nReturn a compact JSON object with an "aboutMe" string and an ordered "experiences" array of strings. Do not include explanations.`;
 
     const userPrompt = {
       jobTitle,
       jobDescription,
       currentAboutMe: aboutMe,
       experiences,
-      guidance: 'Keep details honest but emphasize overlap with the target role. You may adjust phrasing, reorder entries, trim irrelevant details, and create a personable cover letter that nods to the company needs.'
+      guidance: 'Keep details honest but emphasize overlap with the target role. You may adjust phrasing, reorder entries, and trim irrelevant details.'
     };
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -127,7 +127,6 @@ async function handleTailorRequest(req, res) {
     res.end(JSON.stringify({
       aboutMe: parsed.aboutMe || aboutMe,
       experiences: Array.isArray(parsed.experiences) ? parsed.experiences : experiences.split(/\n{2,}/).map((item) => item.trim()).filter(Boolean),
-      coverLetter: parsed.coverLetter || ''
     }));
   } catch (error) {
     console.error('Tailor request failed', error);
