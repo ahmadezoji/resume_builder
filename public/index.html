@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resume Tailor</title>
+  <style>
+    :root {
+      font-family: Arial, sans-serif;
+      color: #0f172a;
+      background-color: #f8fafc;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background: linear-gradient(120deg, #f1f5f9, #e2e8f0);
+    }
+    .container {
+      max-width: 960px;
+      margin: 32px auto 48px;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.1);
+      padding: 24px 28px;
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 28px;
+      text-align: center;
+      color: #0f172a;
+    }
+    p.description {
+      text-align: center;
+      color: #475569;
+      margin-bottom: 24px;
+    }
+    form {
+      display: grid;
+      gap: 16px;
+    }
+    label {
+      font-weight: 600;
+      color: #1e293b;
+      display: block;
+      margin-bottom: 6px;
+    }
+    input[type="text"],
+    textarea {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      padding: 12px;
+      font-size: 14px;
+      font-family: inherit;
+      background: #f8fafc;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    input[type="text"]:focus,
+    textarea:focus {
+      outline: none;
+      border-color: #0ea5e9;
+      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+      background: #ffffff;
+    }
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+    button.primary {
+      background: linear-gradient(135deg, #0ea5e9, #0284c7);
+      color: #fff;
+      box-shadow: 0 10px 20px rgba(14, 165, 233, 0.35);
+    }
+    button.secondary {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .card {
+      background: #f8fafc;
+      border-radius: 10px;
+      padding: 16px;
+      border: 1px solid #e2e8f0;
+    }
+    .card h2 {
+      margin-top: 0;
+      margin-bottom: 8px;
+      font-size: 18px;
+      color: #0f172a;
+    }
+    .result-text {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px dashed #cbd5e1;
+      background: #fff;
+      padding: 12px;
+      min-height: 120px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: inherit;
+      font-size: 14px;
+    }
+    .status {
+      color: #0f172a;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 20px;
+    }
+    .status.error {
+      color: #dc2626;
+    }
+    footer {
+      text-align: center;
+      color: #94a3b8;
+      margin-top: 16px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AI Resume Tailor</h1>
+    <p class="description">Paste your job posting and resume summary. The app will rewrite your About Me and reorder experiences to match the role.</p>
+
+    <form id="resume-form">
+      <div>
+        <label for="jobTitle">Job title</label>
+        <input type="text" id="jobTitle" name="jobTitle" required placeholder="Frontend Developer" />
+      </div>
+      <div>
+        <label for="jobDescription">Job description / requirements</label>
+        <textarea id="jobDescription" name="jobDescription" required placeholder="Paste the job posting..." ></textarea>
+      </div>
+      <div>
+        <label for="aboutMe">Your current About Me</label>
+        <textarea id="aboutMe" name="aboutMe" required placeholder="A short summary about you..." ></textarea>
+      </div>
+      <div>
+        <label for="experiences">Your experiences (separate roles with blank lines)</label>
+        <textarea id="experiences" name="experiences" required placeholder="Experience 1...&#10;&#10;Experience 2..." ></textarea>
+      </div>
+      <div class="actions">
+        <button type="submit" class="primary" id="submit-btn">Tailor my resume</button>
+        <span class="status" id="status"></span>
+      </div>
+    </form>
+
+    <div class="grid" style="margin-top: 24px;">
+      <div class="card">
+        <div class="actions" style="justify-content: space-between;">
+          <h2>Rewritten About Me</h2>
+          <button class="secondary" type="button" data-copy-target="about-output">Copy</button>
+        </div>
+        <div id="about-output" class="result-text">Waiting for AI rewrite...</div>
+      </div>
+      <div class="card">
+        <div class="actions" style="justify-content: space-between;">
+          <h2>Reordered Experiences</h2>
+          <button class="secondary" type="button" data-copy-target="experience-output">Copy</button>
+        </div>
+        <div id="experience-output" class="result-text">Awaiting tailored experiences...</div>
+      </div>
+    </div>
+
+    <footer>OpenAI-powered resume tailoring. Keep content honest; use responsibly.</footer>
+  </div>
+
+  <script>
+    const form = document.getElementById('resume-form');
+    const statusEl = document.getElementById('status');
+    const submitBtn = document.getElementById('submit-btn');
+    const aboutOutput = document.getElementById('about-output');
+    const experienceOutput = document.getElementById('experience-output');
+
+    async function copyText(targetId) {
+      const text = document.getElementById(targetId).innerText;
+      try {
+        await navigator.clipboard.writeText(text);
+        statusEl.textContent = 'Copied to clipboard!';
+        statusEl.classList.remove('error');
+      } catch (err) {
+        statusEl.textContent = 'Copy failed. Please copy manually.';
+        statusEl.classList.add('error');
+      }
+    }
+
+    document.querySelectorAll('button[data-copy-target]').forEach((btn) => {
+      btn.addEventListener('click', () => copyText(btn.getAttribute('data-copy-target')));
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      statusEl.textContent = 'Tailoring with AI...';
+      statusEl.classList.remove('error');
+      submitBtn.disabled = true;
+
+      const payload = {
+        jobTitle: form.jobTitle.value.trim(),
+        jobDescription: form.jobDescription.value.trim(),
+        aboutMe: form.aboutMe.value.trim(),
+        experiences: form.experiences.value.trim(),
+      };
+
+      try {
+        const response = await fetch('/api/tailor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || 'Request failed');
+        }
+
+        const data = await response.json();
+        aboutOutput.textContent = data.aboutMe || 'No rewrite returned.';
+        experienceOutput.textContent = Array.isArray(data.experiences) ? data.experiences.join('\n\n') : 'No experience data returned.';
+        statusEl.textContent = 'Done! Review and copy the tailored text below.';
+      } catch (error) {
+        console.error(error);
+        statusEl.textContent = error.message || 'Something went wrong.';
+        statusEl.classList.add('error');
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
