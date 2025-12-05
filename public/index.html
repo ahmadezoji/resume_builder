@@ -138,6 +138,61 @@
     .status.error {
       color: #dc2626;
     }
+    .upload-section {
+      margin-top: 48px;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 32px;
+    }
+    .upload-section h2 {
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+    .upload-section p {
+      margin-top: 0;
+      color: #475569;
+    }
+    input[type="file"] {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+    }
+    .download-link {
+      display: inline-block;
+      margin-top: 8px;
+      text-decoration: none;
+      text-align: center;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-weight: 600;
+    }
+    .download-link.primary {
+      background: linear-gradient(135deg, #0ea5e9, #0284c7);
+      color: #fff;
+    }
+    .download-link.secondary {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+    .download-block {
+      margin-bottom: 16px;
+    }
+    .download-block strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+    .download-block p {
+      margin: 0;
+      color: #475569;
+      font-size: 14px;
+    }
+    .result-text hr {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 16px 0;
+    }
     footer {
       text-align: center;
       color: #94a3b8;
@@ -198,6 +253,57 @@
       </div>
     </div>
 
+    <section class="upload-section">
+      <h2>Upload your PDF resume</h2>
+      <p>Let the app read your existing resume, align it to a job, and return refreshed sections plus a downloadable tailored PDF.</p>
+
+      <form id="upload-form" enctype="multipart/form-data">
+        <div>
+          <label for="uploadJobTitle">Job title</label>
+          <input type="text" id="uploadJobTitle" name="jobTitle" required placeholder="Product Manager" />
+        </div>
+        <div>
+          <label for="uploadJobDescription">Job description / requirements</label>
+          <textarea id="uploadJobDescription" name="jobDescription" required placeholder="Paste the job posting..."></textarea>
+        </div>
+        <div>
+          <label for="resume">Resume PDF</label>
+          <input type="file" id="resume" name="resume" accept="application/pdf" required />
+        </div>
+        <div class="actions">
+          <button type="submit" class="primary" id="upload-btn">Upload & tailor</button>
+          <span class="status" id="upload-status"></span>
+        </div>
+      </form>
+
+      <div class="grid" style="margin-top: 24px;">
+        <div class="card">
+          <h2>Detected personal info</h2>
+          <div id="personal-output" class="result-text">Upload a resume to see parsed details.</div>
+        </div>
+        <div class="card">
+          <h2>Detected skills</h2>
+          <div id="skills-output" class="result-text">Skills will appear here after upload.</div>
+        </div>
+        <div class="card">
+          <h2>Optimized downloads</h2>
+          <div id="pdf-output" class="result-text">
+            <div class="download-block">
+              <strong>Tailored resume (PDF)</strong>
+              <p id="pdf-message">Upload your resume to generate a downloadable tailored PDF.</p>
+              <a id="download-resume" class="download-link primary" href="#" download="Optimized-Resume.pdf" style="display:none;">Download optimized resume</a>
+            </div>
+            <hr />
+            <div class="download-block">
+              <strong>Cover letter (TXT)</strong>
+              <p id="cover-letter-message">A separate cover_letter.txt will be generated for every upload.</p>
+              <a id="download-cover-letter" class="download-link secondary" href="#" download="cover_letter.txt" style="display:none;">Download cover_letter.txt</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
 
     <footer>OpenAI-powered resume tailoring. Keep content honest; use responsibly.</footer>
   </div>
@@ -209,6 +315,22 @@
     const aboutOutput = document.getElementById('about-output');
     const experienceOutput = document.getElementById('experience-output');
     const coverOutput = document.getElementById('cover-output');
+    const uploadForm = document.getElementById('upload-form');
+    const uploadStatus = document.getElementById('upload-status');
+    const uploadBtn = document.getElementById('upload-btn');
+    const uploadJobTitleInput = document.getElementById('uploadJobTitle');
+    const uploadJobDescriptionInput = document.getElementById('uploadJobDescription');
+    const resumeInput = document.getElementById('resume');
+    const personalOutput = document.getElementById('personal-output');
+    const skillsOutput = document.getElementById('skills-output');
+    const downloadResumeLink = document.getElementById('download-resume');
+    const downloadCoverLetterLink = document.getElementById('download-cover-letter');
+    const pdfMessage = document.getElementById('pdf-message');
+    const coverLetterMessage = document.getElementById('cover-letter-message');
+    const downloadUrls = {
+      resume: '',
+      coverLetter: '',
+    };
 
     async function copyText(targetId) {
       const text = document.getElementById(targetId).innerText;
@@ -225,6 +347,65 @@
     document.querySelectorAll('button[data-copy-target]').forEach((btn) => {
       btn.addEventListener('click', () => copyText(btn.getAttribute('data-copy-target')));
     });
+
+    function formatPersonalInfo(info = {}) {
+      const parts = [];
+      if (info.name) parts.push(`Name: ${info.name}`);
+      if (info.email) parts.push(`Email: ${info.email}`);
+      if (info.phone) parts.push(`Phone: ${info.phone}`);
+      if (info.location) parts.push(`Location: ${info.location}`);
+      if (Array.isArray(info.links) && info.links.length) {
+        parts.push(`Links: ${info.links.join(', ')}`);
+      }
+      return parts.length ? parts.join('\n') : 'No personal details detected.';
+    }
+
+    function updateDownloadLink({
+      kind,
+      base64,
+      mimeType,
+      fileName,
+      linkEl,
+      messageEl,
+      emptyMessage,
+      successMessage,
+    }) {
+      if (downloadUrls[kind]) {
+        URL.revokeObjectURL(downloadUrls[kind]);
+        downloadUrls[kind] = '';
+      }
+
+      if (!base64) {
+        if (linkEl) {
+          linkEl.style.display = 'none';
+        }
+        if (messageEl) {
+          messageEl.textContent = emptyMessage;
+        }
+        return;
+      }
+
+      const byteCharacters = atob(base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i += 1) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      downloadUrls[kind] = url;
+
+      if (linkEl) {
+        linkEl.href = url;
+        if (fileName) {
+          linkEl.download = fileName;
+        }
+        linkEl.style.display = 'inline-block';
+      }
+      if (messageEl) {
+        messageEl.textContent = successMessage;
+      }
+    }
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -264,6 +445,97 @@
         submitBtn.disabled = false;
       }
     });
+
+    if (uploadForm) {
+      uploadForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        uploadStatus.textContent = 'Uploading and tailoring...';
+        uploadStatus.classList.remove('error');
+        uploadBtn.disabled = true;
+
+        const file = resumeInput?.files?.[0];
+        if (!file) {
+          uploadStatus.textContent = 'Please select a PDF resume.';
+          uploadStatus.classList.add('error');
+          uploadBtn.disabled = false;
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('jobTitle', uploadJobTitleInput.value.trim());
+        formData.append('jobDescription', uploadJobDescriptionInput.value.trim());
+        formData.append('resume', file);
+
+        try {
+          const response = await fetch('/api/upload-resume', {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || 'Upload failed');
+          }
+
+          aboutOutput.textContent = data.aboutMe || 'No rewrite returned.';
+          experienceOutput.textContent = Array.isArray(data.experiences) ? data.experiences.join('\n\n') : 'No experience data returned.';
+          coverOutput.textContent = data.coverLetter || 'No cover letter returned.';
+          personalOutput.textContent = formatPersonalInfo(data.personalInfo || {});
+          skillsOutput.textContent = Array.isArray(data.skills) && data.skills.length
+            ? data.skills.join(', ')
+            : 'No skills detected.';
+          updateDownloadLink({
+            kind: 'resume',
+            base64: data.optimizedPdf,
+            mimeType: 'application/pdf',
+            fileName: 'Optimized-Resume.pdf',
+            linkEl: downloadResumeLink,
+            messageEl: pdfMessage,
+            emptyMessage: 'No PDF returned.',
+            successMessage: 'Your tailored PDF is ready.',
+          });
+          updateDownloadLink({
+            kind: 'coverLetter',
+            base64: data.coverLetterFile,
+            mimeType: 'text/plain',
+            fileName: 'cover_letter.txt',
+            linkEl: downloadCoverLetterLink,
+            messageEl: coverLetterMessage,
+            emptyMessage: 'No cover letter file returned.',
+            successMessage: 'cover_letter.txt is ready.',
+          });
+          uploadStatus.textContent = 'Upload processed! Download your PDF or copy the text above.';
+          if (resumeInput) {
+            resumeInput.value = '';
+          }
+        } catch (error) {
+          console.error(error);
+          uploadStatus.textContent = error.message || 'Something went wrong.';
+          uploadStatus.classList.add('error');
+          updateDownloadLink({
+            kind: 'resume',
+            base64: '',
+            mimeType: 'application/pdf',
+            fileName: 'Optimized-Resume.pdf',
+            linkEl: downloadResumeLink,
+            messageEl: pdfMessage,
+            emptyMessage: 'No PDF returned.',
+            successMessage: 'No PDF returned.',
+          });
+          updateDownloadLink({
+            kind: 'coverLetter',
+            base64: '',
+            mimeType: 'text/plain',
+            fileName: 'cover_letter.txt',
+            linkEl: downloadCoverLetterLink,
+            messageEl: coverLetterMessage,
+            emptyMessage: 'No cover letter file returned.',
+            successMessage: 'No cover letter file returned.',
+          });
+        } finally {
+          uploadBtn.disabled = false;
+        }
+      });
+    }
   </script>
 </body>
 </html>
