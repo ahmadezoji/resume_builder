@@ -9,6 +9,7 @@ AI-powered resume assistant that rewrites your summary, reorders your experience
 - Provide ready-to-copy sections (About Me, experiences, cover letter) plus downloadable PDF/TXT files you can share on platforms like Gumroad or Ko-fi.
 
 ## Features
+## setting
 
 - Upload any PDF resume: the server extracts the text and feeds it to OpenAI along with the target job description.
 - Generates aligned About Me, skills, reordered experiences, and a friendly cover letter.
