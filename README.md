@@ -6,7 +6,7 @@ AI-powered resume assistant that rewrites your summary, reorders your experience
 
 - Automate CV tailoring for job-specific submissions.
 - Keep the visual layout of your original resume while inserting role-aligned content.
-- Provide ready-to-copy sections (About Me, experiences, cover letter) plus downloadable PDF/TXT files you can share on platforms like Gumroad or Ko-fi.
+- Provide ready-to-copy sections (About Me, experiences, cover letter) plus downloadable PDF/TXT files .
 
 ## Features
 ## setting
@@ -37,4 +37,4 @@ AI-powered resume assistant that rewrites your summary, reorders your experience
 
 - Keep your resume facts honest; the assistant only polishes wording and reorders entries.
 - After processing, copy the rewritten text blocks or download the optimized PDF and cover_letter.txt for sharing.
-- Because PDFs are generated server-side, you can host this project and sell access to automated, role-specific resume tailoring on marketplaces (Gumroad, Ko-fi, etc.). Provide your users with their own OpenAI key or proxy the requests through yours with appropriate usage controls.
+- Because PDFs are generated server-side, you can host this project and sell access to automated, role-specific resume tailoring 
