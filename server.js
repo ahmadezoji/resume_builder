@@ -4,6 +4,8 @@ const path = require('path');
 const formidable = require('formidable');
 const pdfParse = require('pdf-parse');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { renderResumeHtml } = require('./templates/resumeTemplate');
+const { generatePdfFromHtml } = require('./utils/pdfGenerator');
 
 const PORT = process.env.PORT || 5500;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -439,10 +441,21 @@ async function handleResumeUpload(req, res) {
 
     let pdfBuffer;
     try {
-      pdfBuffer = await appendTailoredResumeToPdf(originalPdfBuffer, tailored);
-    } catch (pdfError) {
-      console.error('Failed to append tailored content to PDF, returning original file.', pdfError);
-      pdfBuffer = originalPdfBuffer;
+      const resumeHtml = renderResumeHtml({
+        personalInfo: tailored.personalInfo,
+        aboutMe: tailored.aboutMe,
+        skills: tailored.skills,
+        experiences: tailored.experiences,
+      });
+      pdfBuffer = await generatePdfFromHtml(resumeHtml);
+    } catch (htmlError) {
+      console.error('Failed to render HTML template, falling back to PDF append workflow.', htmlError);
+      try {
+        pdfBuffer = await appendTailoredResumeToPdf(originalPdfBuffer, tailored);
+      } catch (pdfError) {
+        console.error('Failed to append tailored content to PDF, returning original file.', pdfError);
+        pdfBuffer = originalPdfBuffer;
+      }
     }
 
     const coverLetterFile = Buffer.from(tailored.coverLetter || 'No cover letter generated.', 'utf8').toString('base64');

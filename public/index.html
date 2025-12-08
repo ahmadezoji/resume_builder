@@ -206,29 +206,6 @@
     <h1>AI Resume Tailor</h1>
       <p class="description">Paste your job posting and resume summary. The app will rewrite your About Me, reorder experiences, and draft a friendly cover letter for the role.</p>
 
-    <form id="resume-form">
-      <div>
-        <label for="jobTitle">Job title</label>
-        <input type="text" id="jobTitle" name="jobTitle" required placeholder="Frontend Developer" />
-      </div>
-      <div>
-        <label for="jobDescription">Job description / requirements</label>
-        <textarea id="jobDescription" name="jobDescription" required placeholder="Paste the job posting..." ></textarea>
-      </div>
-      <div>
-        <label for="aboutMe">Your current About Me</label>
-        <textarea id="aboutMe" name="aboutMe" required placeholder="A short summary about you..." ></textarea>
-      </div>
-      <div>
-        <label for="experiences">Your experiences (separate roles with blank lines)</label>
-        <textarea id="experiences" name="experiences" required placeholder="Experience 1...&#10;&#10;Experience 2..." ></textarea>
-      </div>
-      <div class="actions">
-        <button type="submit" class="primary" id="submit-btn">Tailor my resume</button>
-        <span class="status" id="status"></span>
-      </div>
-    </form>
-
     <div class="grid" style="margin-top: 24px;">
       <div class="card">
         <div class="actions" style="justify-content: space-between;">
@@ -309,9 +286,6 @@
   </div>
 
   <script>
-    const form = document.getElementById('resume-form');
-    const statusEl = document.getElementById('status');
-    const submitBtn = document.getElementById('submit-btn');
     const aboutOutput = document.getElementById('about-output');
     const experienceOutput = document.getElementById('experience-output');
     const coverOutput = document.getElementById('cover-output');
@@ -334,13 +308,20 @@
 
     async function copyText(targetId) {
       const text = document.getElementById(targetId).innerText;
+      const statusEl = document.getElementById('status');
       try {
         await navigator.clipboard.writeText(text);
-        statusEl.textContent = 'Copied to clipboard!';
-        statusEl.classList.remove('error');
+        if (statusEl) {
+          statusEl.textContent = 'Copied to clipboard!';
+          statusEl.classList.remove('error');
+        }
       } catch (err) {
-        statusEl.textContent = 'Copy failed. Please copy manually.';
-        statusEl.classList.add('error');
+        if (statusEl) {
+          statusEl.textContent = 'Copy failed. Please copy manually.';
+          statusEl.classList.add('error');
+        } else {
+          console.error('Copy failed. Please copy manually.');
+        }
       }
     }
 
@@ -406,45 +387,6 @@
         messageEl.textContent = successMessage;
       }
     }
-
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      statusEl.textContent = 'Tailoring with AI...';
-      statusEl.classList.remove('error');
-      submitBtn.disabled = true;
-
-      const payload = {
-        jobTitle: form.jobTitle.value.trim(),
-        jobDescription: form.jobDescription.value.trim(),
-        aboutMe: form.aboutMe.value.trim(),
-        experiences: form.experiences.value.trim(),
-      };
-
-      try {
-        const response = await fetch('/api/tailor', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || 'Request failed');
-        }
-
-        const data = await response.json();
-        aboutOutput.textContent = data.aboutMe || 'No rewrite returned.';
-        experienceOutput.textContent = Array.isArray(data.experiences) ? data.experiences.join('\n\n') : 'No experience data returned.';
-        coverOutput.textContent = data.coverLetter || 'No cover letter returned.';
-        statusEl.textContent = 'Done! Review and copy the tailored text below.';
-      } catch (error) {
-        console.error(error);
-        statusEl.textContent = error.message || 'Something went wrong.';
-        statusEl.classList.add('error');
-      } finally {
-        submitBtn.disabled = false;
-      }
-    });
 
     if (uploadForm) {
       uploadForm.addEventListener('submit', async (event) => {
