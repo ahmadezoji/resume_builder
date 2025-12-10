@@ -38,6 +38,29 @@ const contentTypes = {
   '.json': 'application/json; charset=utf-8',
 };
 
+function toNameSlug(value = '') {
+  if (!value) return 'candidate';
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s_-]/g, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .join('_') || 'candidate';
+}
+
+function getTimestampStamp(date = new Date()) {
+  return String(date.getTime());
+}
+
+function buildExportFileName(prefix, candidateName, extension) {
+  const safePrefix = prefix || 'resume';
+  const slug = toNameSlug(candidateName);
+  const stamp = getTimestampStamp();
+  const safeExtension = (extension || 'pdf').replace(/^\.+/, '');
+  return `${safePrefix}_${slug}_${stamp}.${safeExtension}`;
+}
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(payload));
@@ -439,6 +462,9 @@ async function handleResumeUpload(req, res) {
       skills: Array.isArray(parsed.skills) ? parsed.skills : [],
     };
 
+    const resumeFileName = buildExportFileName('resume', tailored.personalInfo?.name, 'pdf');
+    const coverLetterFileName = buildExportFileName('cover', tailored.personalInfo?.name, 'txt');
+
     let pdfBuffer;
     try {
       const resumeHtml = renderResumeHtml({
@@ -467,7 +493,9 @@ async function handleResumeUpload(req, res) {
       personalInfo: tailored.personalInfo,
       skills: tailored.skills,
       optimizedPdf: pdfBuffer.toString('base64'),
+      optimizedFileName: resumeFileName,
       coverLetterFile,
+      coverLetterFileName,
       experienceItems: normalizedExperiences,
     });
   } catch (error) {
