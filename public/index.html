@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Resume Tailor</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
     :root {
       font-family: Arial, sans-serif;
       color: #0f172a;
@@ -108,6 +111,7 @@
       border-radius: 10px;
       padding: 16px;
       border: 1px solid #e2e8f0;
+      overflow: hidden;
     }
     .card h2 {
       margin-top: 0;
@@ -122,10 +126,11 @@
       background: #fff;
       padding: 12px;
       min-height: 120px;
-      white-space: pre-wrap;
-      word-break: break-word;
       font-family: inherit;
       font-size: 14px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .status {
       color: #0f172a;
@@ -195,41 +200,27 @@
     }
     footer {
       text-align: center;
+      margin-top: 32px;
+    }
+    footer .footnote {
       color: #94a3b8;
-      margin-top: 16px;
       font-size: 13px;
+      margin: 0;
+    }
+    .tailor-results {
+      margin-top: 48px;
+    }
+    .tailor-results .tailor-callout {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .tailor-results .tailor-callout .description {
+      margin-bottom: 0;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>AI Resume Tailor</h1>
-      <p class="description">Paste your job posting and resume summary. The app will rewrite your About Me, reorder experiences, and draft a friendly cover letter for the role.</p>
-
-    <div class="grid" style="margin-top: 24px;">
-      <div class="card">
-        <div class="actions" style="justify-content: space-between;">
-          <h2>Rewritten About Me</h2>
-          <button class="secondary" type="button" data-copy-target="about-output">Copy</button>
-        </div>
-        <div id="about-output" class="result-text">Waiting for AI rewrite...</div>
-      </div>
-      <div class="card">
-        <div class="actions" style="justify-content: space-between;">
-          <h2>Reordered Experiences</h2>
-          <button class="secondary" type="button" data-copy-target="experience-output">Copy</button>
-        </div>
-        <div id="experience-output" class="result-text">Awaiting tailored experiences...</div>
-      </div>
-       <div class="card">
-        <div class="actions" style="justify-content: space-between;">
-          <h2>Cover Letter</h2>
-          <button class="secondary" type="button" data-copy-target="cover-output">Copy</button>
-        </div>
-        <div id="cover-output" class="result-text">Cover letter draft will appear here...</div>
-      </div>
-    </div>
-
     <section class="upload-section">
       <h2>Upload your PDF resume</h2>
       <p>Let the app read your existing resume, align it to a job, and return refreshed sections plus a downloadable tailored PDF.</p>
@@ -281,8 +272,39 @@
       </div>
     </section>
 
+    <section class="tailor-results">
+      <div class="tailor-callout">
+        <h1>AI Resume Tailor</h1>
+        <p class="description">Paste your job posting and resume summary. The app will rewrite your About Me, reorder experiences, and draft a friendly cover letter for the role.</p>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <div class="actions" style="justify-content: space-between;">
+            <h2>Rewritten About Me</h2>
+            <button class="secondary" type="button" data-copy-target="about-output">Copy</button>
+          </div>
+          <div id="about-output" class="result-text">Waiting for AI rewrite...</div>
+        </div>
+        <div class="card">
+          <div class="actions" style="justify-content: space-between;">
+            <h2>Reordered Experiences</h2>
+            <button class="secondary" type="button" data-copy-target="experience-output">Copy</button>
+          </div>
+          <div id="experience-output" class="result-text">Awaiting tailored experiences...</div>
+        </div>
+        <div class="card">
+          <div class="actions" style="justify-content: space-between;">
+            <h2>Cover Letter</h2>
+            <button class="secondary" type="button" data-copy-target="cover-output">Copy</button>
+          </div>
+          <div id="cover-output" class="result-text">Cover letter draft will appear here...</div>
+        </div>
+      </div>
+    </section>
 
-    <footer>OpenAI-powered resume tailoring. Keep content honest; use responsibly.</footer>
+    <footer>
+      <p class="footnote">OpenAI-powered resume tailoring. Keep content honest; use responsibly.</p>
+    </footer>
   </div>
 
   <script>
@@ -425,25 +447,27 @@
           skillsOutput.textContent = Array.isArray(data.skills) && data.skills.length
             ? data.skills.join(', ')
             : 'No skills detected.';
+          const optimizedFileName = data.optimizedFileName || 'Optimized-Resume.pdf';
+          const coverFileName = data.coverLetterFileName || 'cover_letter.txt';
           updateDownloadLink({
             kind: 'resume',
             base64: data.optimizedPdf,
             mimeType: 'application/pdf',
-            fileName: 'Optimized-Resume.pdf',
+            fileName: optimizedFileName,
             linkEl: downloadResumeLink,
             messageEl: pdfMessage,
             emptyMessage: 'No PDF returned.',
-            successMessage: 'Your tailored PDF is ready.',
+            successMessage: `${optimizedFileName} is ready.`,
           });
           updateDownloadLink({
             kind: 'coverLetter',
             base64: data.coverLetterFile,
             mimeType: 'text/plain',
-            fileName: 'cover_letter.txt',
+            fileName: coverFileName,
             linkEl: downloadCoverLetterLink,
             messageEl: coverLetterMessage,
             emptyMessage: 'No cover letter file returned.',
-            successMessage: 'cover_letter.txt is ready.',
+            successMessage: `${coverFileName} is ready.`,
           });
           uploadStatus.textContent = 'Upload processed! Download your PDF or copy the text above.';
           if (resumeInput) {
