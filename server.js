@@ -450,6 +450,7 @@ async function handleResumeUpload(req, res) {
 }
 - Derive personal details, education, and languages from the resume text when possible.
 - Always include company and explicit year ranges for every experience entry. Prefer YYYY-YYYY or YYYY-Present formats.
+- For each experience.summary, produce 3-5 bullet-style sentences separated by newline characters. The first bullet should explicitly connect the role to the target job requirements, while the remaining bullets must be refined versions of the original resume details (do not delete facts—rewrite for clarity and impact). If the resume offers more than three relevant statements, keep them all by merging overlapping ideas rather than removing content.
 - Keep experience summaries concise and impact-focused, highlighting overlap with the job description.
 - Ensure the cover letter references the job title and key requirements from the supplied description.`;
 
