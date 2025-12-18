@@ -14,113 +14,178 @@ const toParagraphs = (text = '') => {
     .join('');
 };
 
-const renderExperienceSection = (experiences = []) => {
-  if (!experiences.length) {
-    return '<p class="muted">No experience entries were generated.</p>';
-  }
+const toBulletList = (text = '') => {
+  const lines = String(text)
+    .split(/\n+/)
+    .map((line) => line.replace(/^[•\-\u2022]+\s*/, '').trim())
+    .filter(Boolean);
 
-  return experiences.map((entry, index) => {
-    const company = escapeHtml(entry.company || 'Company');
-    const role = escapeHtml(entry.role || 'Role');
-    const years = escapeHtml(entry.years || '');
-    const summary = toParagraphs(entry.summary || 'Summary unavailable.');
-    const isLast = index === experiences.length - 1;
-
-    return `
-      <article class="experience-card">
-        <div class="timeline">
-          <span class="dot"></span>
-          ${isLast ? '' : '<span class="line"></span>'}
-        </div>
-        <div class="experience-content">
-          <div class="experience-meta">
-            <div>
-              <h3>${company}</h3>
-              <p class="role">${role}</p>
-            </div>
-            <span class="years">${years}</span>
-          </div>
-          <div class="experience-body">
-            ${summary}
-          </div>
-        </div>
-      </article>
-    `;
-  }).join('\n');
-};
-
-const renderSkillPills = (skills = []) => {
-  if (!skills.length) {
-    return '<p class="muted">Skills available upon request.</p>';
-  }
-
-  return `<ul class="skill-list">${skills
-    .map((skill) => `<li>${escapeHtml(skill || '')}</li>`)
-    .join('')}</ul>`;
-};
-
-const renderLinkList = (links = []) => {
-  const normalized = Array.isArray(links)
-    ? links.map((link) => (typeof link === 'string' ? link.trim() : ''))
-      .filter(Boolean)
-    : [];
-
-  if (!normalized.length) {
+  if (!lines.length) {
     return '';
   }
 
-  return `<ul class="link-list">${normalized.map((link) => {
-    const display = escapeHtml(link);
-    const prefixed = /^https?:\/\//i.test(link)
-      ? link
-      : `https://${link.replace(/^https?:\/\//i, '')}`;
-    return `<li><a href="${escapeHtml(prefixed)}">${display}</a></li>`;
-  }).join('')}</ul>`;
+  return `<ul class="bullet-list">${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`;
 };
 
-const renderContactDetails = ({ email, phone, location }) => {
+const deriveMonogram = (name = '') => {
+  const segments = String(name)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  if (!segments.length) return 'CV';
+  return segments.map((part) => part[0]?.toUpperCase() || '').join('');
+};
+
+const renderContactDetails = ({ email, phone, location, links = [] } = {}) => {
   const rows = [];
+
+  if (phone) {
+    const safePhone = escapeHtml(phone);
+    const phoneHref = escapeHtml(`tel:${String(phone).replace(/[^+\d]/g, '') || phone}`);
+    rows.push(`<li><span class="contact-label">Phone</span><a href="${phoneHref}">${safePhone}</a></li>`);
+  }
 
   if (email) {
     const safeEmail = escapeHtml(email);
     const mailHref = escapeHtml(`mailto:${encodeURIComponent(email)}`);
-    rows.push(`<li><span>Email</span><a href="${mailHref}">${safeEmail}</a></li>`);
-  }
-
-  if (phone) {
-    const safePhone = escapeHtml(phone);
-    const digits = String(phone).replace(/[^+\d]/g, '') || phone;
-    const phoneHref = escapeHtml(`tel:${digits}`);
-    rows.push(`<li><span>Phone</span><a href="${phoneHref}">${safePhone}</a></li>`);
+    rows.push(`<li><span class="contact-label">Email</span><a href="${mailHref}">${safeEmail}</a></li>`);
   }
 
   if (location) {
-    rows.push(`<li><span>Location</span><span>${escapeHtml(location)}</span></li>`);
+    rows.push(`<li><span class="contact-label">Location</span><span>${escapeHtml(location)}</span></li>`);
+  }
+
+  const normalizedLinks = Array.isArray(links)
+    ? links.map((link) => (typeof link === 'string' ? link.trim() : '')).filter(Boolean)
+    : [];
+
+  if (normalizedLinks.length) {
+    const link = normalizedLinks[0];
+    const href = /^https?:\/\//i.test(link) ? link : `https://${link}`;
+    rows.push(`<li><span class="contact-label">Website</span><a href="${escapeHtml(href)}">${escapeHtml(link)}</a></li>`);
   }
 
   if (!rows.length) {
-    return '<p class="muted">No contact details detected.</p>';
+    return '<p class="muted">Contact information unavailable.</p>';
   }
 
   return `<ul class="contact-list">${rows.join('')}</ul>`;
 };
+
+const renderSkills = (skills = []) => {
+  const validSkills = Array.isArray(skills)
+    ? skills.map((skill) => (typeof skill === 'string' ? skill.trim() : '')).filter(Boolean)
+    : [];
+
+  if (!validSkills.length) {
+    return '<p class="muted">Skills available upon request.</p>';
+  }
+
+  return `<ul class="dot-list">${validSkills.map((skill) => `<li>${escapeHtml(skill)}</li>`).join('')}</ul>`;
+};
+
+const renderLanguages = (languages = []) => {
+  if (!Array.isArray(languages) || !languages.length) {
+    return '<p class="muted">Languages not specified.</p>';
+  }
+
+  const rows = languages
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return `<li>${escapeHtml(entry)}</li>`;
+      }
+      const name = escapeHtml(entry.name || '');
+      const fluency = escapeHtml(entry.fluency || entry.proficiency || '');
+      if (!name && !fluency) return '';
+      return `<li>${name}${fluency ? ` — ${fluency}` : ''}</li>`;
+    })
+    .filter(Boolean);
+
+  if (!rows.length) {
+    return '<p class="muted">Languages not specified.</p>';
+  }
+
+  return `<ul class="dot-list">${rows.join('')}</ul>`;
+};
+
+const renderEducation = (education = []) => {
+  if (!Array.isArray(education) || !education.length) {
+    return '<p class="muted">Education summary unavailable.</p>';
+  }
+
+  return education.map((entry) => {
+    const institution = escapeHtml(entry.institution || 'Institution');
+    const credential = escapeHtml(entry.credential || '');
+    const years = escapeHtml(entry.years || '');
+    const details = entry.details ? `<p class="edu-notes">${escapeHtml(entry.details)}</p>` : '';
+
+    return `
+      <article class="edu-item">
+        <div class="edu-years">${years}</div>
+        <div class="edu-body">
+          <h4>${institution}</h4>
+          ${credential ? `<p class="edu-credential">${credential}</p>` : ''}
+          ${details}
+        </div>
+      </article>
+    `;
+  }).join('');
+};
+
+const renderExperience = (experiences = []) => {
+  if (!Array.isArray(experiences) || !experiences.length) {
+    return '<p class="muted">No work experiences were generated.</p>';
+  }
+
+  return experiences.map((entry) => {
+    const company = escapeHtml(entry.company || 'Company');
+    const role = escapeHtml(entry.role || 'Role');
+    const years = escapeHtml(entry.years || '');
+    const bullets = toBulletList(entry.summary || '');
+    const summary = bullets || toParagraphs(entry.summary || '');
+
+    return `
+      <article class="experience-card">
+        <div class="experience-header">
+          <div>
+            <h4>${company}</h4>
+            <p class="role">${role}</p>
+          </div>
+          <span class="years">${years}</span>
+        </div>
+        <div class="experience-body">
+          ${summary || '<p class="muted">Details unavailable.</p>'}
+        </div>
+      </article>
+    `;
+  }).join('');
+};
+
+const renderBadgeHeading = (label, letter) => `
+  <div class="section-heading">
+    <span class="section-icon">${letter}</span>
+    <span>${escapeHtml(label)}</span>
+  </div>
+`;
 
 function renderResumeHtml({
   personalInfo = {},
   aboutMe = '',
   skills = [],
   experiences = [],
+  education = [],
+  languages = [],
 } = {}) {
-  const name = escapeHtml(personalInfo.name || 'Name unavailable');
-  const email = personalInfo.email || '';
-  const phone = personalInfo.phone || '';
-  const location = personalInfo.location || '';
-  const links = Array.isArray(personalInfo.links) ? personalInfo.links.filter(Boolean) : [];
-  const safeAbout = toParagraphs(aboutMe || 'No tailored summary generated.');
-  const skillsMarkup = renderSkillPills(skills);
-  const contactMarkup = renderContactDetails({ email, phone, location });
-  const linksMarkup = renderLinkList(links);
-  const contactsLine = [email, phone, location].filter(Boolean).map(escapeHtml).join(' • ');
+  const name = escapeHtml(personalInfo.name || 'Candidate Name');
+  const roleLine = escapeHtml(personalInfo.title || 'Software Developer');
+  const monogram = deriveMonogram(personalInfo.name);
+  const summaryMarkup = toParagraphs(aboutMe || 'No tailored summary generated.');
+  const contactMarkup = renderContactDetails(personalInfo);
+  const skillsMarkup = renderSkills(skills);
+  const educationMarkup = renderEducation(education);
+  const languagesMarkup = renderLanguages(languages);
+  const experienceMarkup = renderExperience(experiences);
 
   return `<!doctype html>
 <html lang="en">
@@ -134,62 +199,93 @@ function renderResumeHtml({
       body {
         margin: 0;
         padding: 32px;
-        font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-        color: #0f172a;
-        background: #e2e8f0;
+        background: #f4f4f6;
+        font-family: "Libre Baskerville", "Times New Roman", serif;
+        color: #1f2933;
+        font-size: 13px;
       }
       .page {
-        max-width: 940px;
+        max-width: 920px;
         margin: 0 auto;
       }
-      .resume-shell {
+      .sheet {
         background: #ffffff;
-        border-radius: 28px;
+        border-radius: 16px;
+        box-shadow: 0 25px 60px rgba(15, 23, 42, 0.12);
         overflow: hidden;
-        box-shadow: 0 25px 60px rgba(15, 23, 42, 0.18);
       }
-      .hero {
-        background: linear-gradient(130deg, #0ea5e9, #4338ca);
-        color: #f8fafc;
-        padding: 40px;
+      .masthead {
+        border-bottom: 2px solid #d6d7da;
+        padding: 44px 48px 32px;
+        position: relative;
+        text-align: center;
       }
-      .hero h1 {
+      .masthead::after {
+        content: "${monogram}";
+        position: absolute;
+        top: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 110px;
+        font-weight: 300;
+        color: rgba(15, 23, 42, 0.06);
+        letter-spacing: 0.16em;
+        pointer-events: none;
+      }
+      .masthead h1 {
         margin: 0;
-        font-size: 38px;
-        letter-spacing: 0.02em;
+        font-size: 40px;
+        letter-spacing: 0.32em;
       }
-      .hero p {
-        margin: 6px 0 0;
-        font-size: 16px;
-        color: rgba(248, 250, 252, 0.85);
+      .masthead p {
+        margin: 10px 0 0;
+        font-size: 13px;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        color: #545b67;
       }
       .layout {
         display: grid;
-        grid-template-columns: minmax(220px, 280px) 1fr;
+        grid-template-columns: 300px 1fr;
         min-height: 100%;
       }
       .sidebar {
-        background: #f8fafc;
+        background: #f9f9fb;
+        border-right: 1px solid #ececf0;
         padding: 32px;
-        border-right: 1px solid #e2e8f0;
       }
       .main-column {
-        padding: 32px 40px 40px;
+        padding: 32px 42px 40px;
       }
-      .panel {
-        margin-bottom: 28px;
+      .info-card,
+      .main-section {
+        margin-bottom: 26px;
       }
-      .panel-title,
-      .section-title {
-        margin: 0 0 12px;
+      .section-heading {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        letter-spacing: 0.16em;
         text-transform: uppercase;
-        letter-spacing: 0.18em;
-        font-size: 13px;
-        color: #475569;
+        color: #6d7381;
+        margin-bottom: 14px;
+      }
+      .section-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 2px solid #b8bcc8;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        color: #4b5563;
+        background: #fff;
+        font-size: 12px;
       }
       .contact-list,
-      .link-list,
-      .skill-list {
+      .dot-list {
         list-style: none;
         padding: 0;
         margin: 0;
@@ -197,121 +293,134 @@ function renderResumeHtml({
       .contact-list li {
         display: flex;
         flex-direction: column;
-        margin-bottom: 16px;
-        font-size: 14px;
+        margin-bottom: 14px;
+        font-size: 13px;
       }
-      .contact-list span:first-child {
+      .contact-label {
         text-transform: uppercase;
-        font-size: 11px;
-        letter-spacing: 0.18em;
-        color: #94a3b8;
-        margin-bottom: 4px;
+        font-size: 10px;
+        letter-spacing: 0.22em;
+        color: #9aa0ac;
+        margin-bottom: 3px;
       }
-      .contact-list a,
-      .link-list a {
-        color: #0f172a;
+      .contact-list a {
+        color: #1f2933;
         text-decoration: none;
       }
-      .link-list li {
-        margin-bottom: 10px;
-        font-size: 14px;
-      }
-      .skill-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-      .skill-list li {
-        padding: 6px 12px;
-        border-radius: 999px;
-        background: #dbeafe;
-        color: #1d4ed8;
+      .dot-list li {
+        position: relative;
+        padding-left: 14px;
+        margin-bottom: 8px;
         font-size: 13px;
+      }
+      .dot-list li::before {
+        content: "";
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: #4c5762;
+        position: absolute;
+        left: 0;
+        top: 7px;
+      }
+      .edu-item {
+        display: grid;
+        grid-template-columns: 74px 1fr;
+        gap: 14px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid #e5e7eb;
+        margin-bottom: 14px;
+      }
+      .edu-item:last-of-type {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+      }
+      .edu-years {
         font-weight: 600;
+        color: #4c5762;
+        font-size: 12px;
       }
-      .section {
-        margin-bottom: 32px;
+      .edu-body h4 {
+        margin: 0;
+        font-size: 16px;
       }
-      .section p {
-        margin: 0 0 10px;
-        line-height: 1.6;
+      .edu-credential {
+        margin: 3px 0;
+        color: #4b5563;
+        font-size: 13px;
       }
-      .muted {
-        color: #94a3b8;
+      .edu-notes {
+        margin: 4px 0 0;
+        font-size: 12px;
+        color: #6b7280;
+      }
+      .main-section .section-heading {
+        color: #4b4f58;
+      }
+      .bullet-list {
+        margin: 0;
+        padding-left: 16px;
+      }
+      .bullet-list li {
+        margin-bottom: 6px;
+        line-height: 1.45;
+        font-size: 13px;
       }
       .experience-card {
-        display: flex;
-        gap: 16px;
-        padding-bottom: 24px;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 18px 20px;
+        margin-bottom: 14px;
+        background: #fff;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.05);
       }
       .experience-card:last-of-type {
-        padding-bottom: 0;
+        margin-bottom: 0;
       }
-      .timeline {
-        position: relative;
-        width: 24px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-      }
-      .timeline .dot {
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: #0ea5e9;
-        border: 3px solid #e0f2fe;
-        box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15);
-      }
-      .timeline .line {
-        flex: 1;
-        width: 2px;
-        background: #e2e8f0;
-        margin-top: 6px;
-      }
-      .experience-content {
-        flex: 1;
-        padding-bottom: 16px;
-        border-bottom: 1px solid #e2e8f0;
-      }
-      .experience-card:last-of-type .experience-content {
-        border-bottom: none;
-        padding-bottom: 0;
-      }
-      .experience-meta {
+      .experience-header {
         display: flex;
         justify-content: space-between;
-        gap: 12px;
+        gap: 10px;
         flex-wrap: wrap;
-        align-items: baseline;
+        border-bottom: 1px solid #ececf0;
+        padding-bottom: 10px;
+        margin-bottom: 10px;
       }
-      .experience-meta h3 {
+      .experience-header h4 {
         margin: 0;
-        font-size: 20px;
-        letter-spacing: 0.02em;
+        font-size: 18px;
+        letter-spacing: 0.03em;
       }
-      .experience-meta .role {
-        margin: 6px 0 0;
-        color: #475569;
+      .role {
+        margin: 4px 0 0;
+        color: #4b5563;
+        font-size: 13px;
       }
       .years {
         font-weight: 600;
-        color: #0f172a;
-        font-size: 14px;
+        color: #374151;
+        font-size: 12px;
       }
       .experience-body p {
-        margin: 10px 0 0;
-        line-height: 1.6;
+        margin: 0 0 6px;
+        line-height: 1.5;
+        font-size: 13px;
+      }
+      .muted {
+        color: #9aa0ac;
+        font-size: 12px;
       }
       @media print {
         body {
-          background: #ffffff;
           padding: 0;
+          background: #ffffff;
         }
-        .page {
-          max-width: none;
-        }
-        .resume-shell {
+        .sheet {
           border-radius: 0;
+          box-shadow: none;
+        }
+        .experience-card {
           box-shadow: none;
         }
       }
@@ -319,35 +428,42 @@ function renderResumeHtml({
   </head>
   <body>
     <div class="page">
-      <main class="resume-shell">
-        <header class="hero">
+      <article class="sheet">
+        <header class="masthead">
           <h1>${name}</h1>
-          ${contactsLine ? `<p>${contactsLine}</p>` : ''}
+          <p>${roleLine}</p>
         </header>
         <div class="layout">
           <aside class="sidebar">
-            <section class="panel">
-              <h2 class="panel-title">Contact</h2>
+            <section class="info-card">
+              ${renderBadgeHeading('Contact', 'C')}
               ${contactMarkup}
             </section>
-            <section class="panel">
-              <h2 class="panel-title">Skills</h2>
+            <section class="info-card">
+              ${renderBadgeHeading('Education', 'E')}
+              ${educationMarkup}
+            </section>
+            <section class="info-card">
+              ${renderBadgeHeading('Skills', 'S')}
               ${skillsMarkup}
             </section>
-            ${linksMarkup ? `<section class="panel"><h2 class="panel-title">Links</h2>${linksMarkup}</section>` : ''}
+            <section class="info-card">
+              ${renderBadgeHeading('Languages', 'L')}
+              ${languagesMarkup}
+            </section>
           </aside>
           <section class="main-column">
-            <section class="section">
-              <h2 class="section-title">Summary</h2>
-              ${safeAbout}
+            <section class="main-section">
+              ${renderBadgeHeading('Profile Summary', 'P')}
+              ${summaryMarkup}
             </section>
-            <section class="section">
-              <h2 class="section-title">Experience</h2>
-              ${renderExperienceSection(experiences)}
+            <section class="main-section">
+              ${renderBadgeHeading('Work Experience', 'W')}
+              ${experienceMarkup}
             </section>
           </section>
         </div>
-      </main>
+      </article>
     </div>
   </body>
 </html>`;

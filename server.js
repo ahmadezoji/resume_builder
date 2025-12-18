@@ -423,6 +423,20 @@ async function handleResumeUpload(req, res) {
     "links": ["string"]
   },
   "skills": ["string"],
+  "languages": [
+    {
+      "name": "string",
+      "fluency": "string"
+    }
+  ],
+  "education": [
+    {
+      "institution": "string",
+      "credential": "string",
+      "years": "YYYY-YYYY or YYYY-Present",
+      "details": "string"
+    }
+  ],
   "aboutMe": "string",
   "experiences": [
     {
@@ -434,8 +448,9 @@ async function handleResumeUpload(req, res) {
   ],
   "coverLetter": "string"
 }
-- Derive personal details from the resume text when possible.
+- Derive personal details, education, and languages from the resume text when possible.
 - Always include company and explicit year ranges for every experience entry. Prefer YYYY-YYYY or YYYY-Present formats.
+- For each experience.summary, produce 3-5 bullet-style sentences separated by newline characters. The first bullet should explicitly connect the role to the target job requirements, while the remaining bullets must be refined versions of the original resume details (do not delete facts—rewrite for clarity and impact). If the resume offers more than three relevant statements, keep them all by merging overlapping ideas rather than removing content.
 - Keep experience summaries concise and impact-focused, highlighting overlap with the job description.
 - Ensure the cover letter references the job title and key requirements from the supplied description.`;
 
@@ -460,6 +475,8 @@ async function handleResumeUpload(req, res) {
       coverLetter: parsed.coverLetter || '',
       personalInfo: parsed.personalInfo || {},
       skills: Array.isArray(parsed.skills) ? parsed.skills : [],
+      education: Array.isArray(parsed.education) ? parsed.education : [],
+      languages: Array.isArray(parsed.languages) ? parsed.languages : [],
     };
 
     const resumeFileName = buildExportFileName('resume', tailored.personalInfo?.name, 'pdf');
@@ -472,6 +489,8 @@ async function handleResumeUpload(req, res) {
         aboutMe: tailored.aboutMe,
         skills: tailored.skills,
         experiences: tailored.experiences,
+        education: tailored.education,
+        languages: tailored.languages,
       });
       pdfBuffer = await generatePdfFromHtml(resumeHtml);
     } catch (htmlError) {
@@ -492,6 +511,8 @@ async function handleResumeUpload(req, res) {
       coverLetter: tailored.coverLetter,
       personalInfo: tailored.personalInfo,
       skills: tailored.skills,
+      education: tailored.education,
+      languages: tailored.languages,
       optimizedPdf: pdfBuffer.toString('base64'),
       optimizedFileName: resumeFileName,
       coverLetterFile,
