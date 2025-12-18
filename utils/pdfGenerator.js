@@ -24,10 +24,10 @@ async function generatePdfFromHtml(html) {
     format: 'A4',
     printBackground: true,
     margin: {
-      top: '0.5in',
-      right: '0.5in',
-      bottom: '0.5in',
-      left: '0.5in',
+      top: '0.35in',
+      right: '0.35in',
+      bottom: '0.35in',
+      left: '0.35in',
     },
   });
   await page.close();

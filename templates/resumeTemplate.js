@@ -198,14 +198,14 @@ function renderResumeHtml({
       }
       body {
         margin: 0;
-        padding: 32px;
+        padding: 20px;
         background: #f4f4f6;
         font-family: "Libre Baskerville", "Times New Roman", serif;
         color: #1f2933;
         font-size: 13px;
       }
       .page {
-        max-width: 920px;
+        max-width: 1020px;
         margin: 0 auto;
       }
       .sheet {
@@ -216,7 +216,7 @@ function renderResumeHtml({
       }
       .masthead {
         border-bottom: 2px solid #d6d7da;
-        padding: 44px 48px 32px;
+        padding: 36px 40px 26px;
         position: relative;
         text-align: center;
       }
@@ -234,8 +234,8 @@ function renderResumeHtml({
       }
       .masthead h1 {
         margin: 0;
-        font-size: 40px;
-        letter-spacing: 0.32em;
+        font-size: 38px;
+        letter-spacing: 0.28em;
       }
       .masthead p {
         margin: 10px 0 0;
@@ -246,20 +246,21 @@ function renderResumeHtml({
       }
       .layout {
         display: grid;
-        grid-template-columns: 300px 1fr;
+        grid-template-columns: 260px 1fr;
+        column-gap: 24px;
         min-height: 100%;
       }
       .sidebar {
         background: #f9f9fb;
         border-right: 1px solid #ececf0;
-        padding: 32px;
+        padding: 26px 26px 28px;
       }
       .main-column {
-        padding: 32px 42px 40px;
+        padding: 28px 36px 32px;
       }
       .info-card,
       .main-section {
-        margin-bottom: 26px;
+        margin-bottom: 20px;
       }
       .section-heading {
         display: flex;
@@ -326,10 +327,10 @@ function renderResumeHtml({
       .edu-item {
         display: grid;
         grid-template-columns: 74px 1fr;
-        gap: 14px;
-        padding-bottom: 14px;
+        gap: 12px;
+        padding-bottom: 12px;
         border-bottom: 1px solid #e5e7eb;
-        margin-bottom: 14px;
+        margin-bottom: 12px;
       }
       .edu-item:last-of-type {
         border-bottom: none;
@@ -363,17 +364,32 @@ function renderResumeHtml({
         padding-left: 16px;
       }
       .bullet-list li {
-        margin-bottom: 6px;
+        margin-bottom: 4px;
         line-height: 1.45;
         font-size: 13px;
+      }
+      .experience-grid {
+        column-count: 1;
+        column-gap: 16px;
+      }
+      @media (min-width: 900px) {
+        .experience-grid {
+          column-count: 2;
+        }
+      }
+      @media print {
+        .experience-grid {
+          column-count: 2;
+        }
       }
       .experience-card {
         border: 1px solid #e5e7eb;
         border-radius: 14px;
-        padding: 18px 20px;
-        margin-bottom: 14px;
+        padding: 16px 18px;
+        margin-bottom: 12px;
         background: #fff;
         box-shadow: 0 10px 25px rgba(15, 23, 42, 0.05);
+        break-inside: avoid;
       }
       .experience-card:last-of-type {
         margin-bottom: 0;
@@ -458,8 +474,10 @@ function renderResumeHtml({
               ${summaryMarkup}
             </section>
             <section class="main-section">
-              ${renderBadgeHeading('Work Experience', 'W')}
-              ${experienceMarkup}
+          ${renderBadgeHeading('Work Experience', 'W')}
+              <div class="experience-grid">
+                ${experienceMarkup}
+              </div>
             </section>
           </section>
         </div>
