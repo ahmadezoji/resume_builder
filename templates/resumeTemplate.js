@@ -5,75 +5,58 @@ const escapeHtml = (value = '') => String(value)
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
+const normalizeTextLines = (text = '') => String(text)
+  .split(/\n+/)
+  .map((line) => line.replace(/^[•\-\u2022]+\s*/, '').trim())
+  .filter(Boolean);
+
 const toParagraphs = (text = '') => {
-  const safeText = escapeHtml(text);
-  return safeText
-    .split(/\n+/)
-    .filter(Boolean)
-    .map((line) => `<p>${line}</p>`)
-    .join('');
+  const lines = normalizeTextLines(text);
+  if (!lines.length) return '<p class="muted">Not provided.</p>';
+  return lines.map((line) => `<p>${escapeHtml(line)}</p>`).join('');
 };
 
 const toBulletList = (text = '') => {
-  const lines = String(text)
-    .split(/\n+/)
-    .map((line) => line.replace(/^[•\-\u2022]+\s*/, '').trim())
-    .filter(Boolean);
-
-  if (!lines.length) {
-    return '';
-  }
-
+  const lines = normalizeTextLines(text);
+  if (!lines.length) return '<p class="muted">Details unavailable.</p>';
   return `<ul class="bullet-list">${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`;
 };
 
-const deriveMonogram = (name = '') => {
-  const segments = String(name)
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2);
-  if (!segments.length) return 'CV';
-  return segments.map((part) => part[0]?.toUpperCase() || '').join('');
-};
+const renderContactRow = ({ email, phone, location, links = [] } = {}) => {
+  const items = [];
 
-const renderContactDetails = ({ email, phone, location, links = [] } = {}) => {
-  const rows = [];
+  if (email) {
+    const safeEmail = escapeHtml(email);
+    items.push(`<a href="mailto:${safeEmail}">${safeEmail}</a>`);
+  }
 
   if (phone) {
     const safePhone = escapeHtml(phone);
     const phoneHref = escapeHtml(`tel:${String(phone).replace(/[^+\d]/g, '') || phone}`);
-    rows.push(`<li><span class="contact-label">Phone</span><a href="${phoneHref}">${safePhone}</a></li>`);
-  }
-
-  if (email) {
-    const safeEmail = escapeHtml(email);
-    const mailHref = escapeHtml(`mailto:${encodeURIComponent(email)}`);
-    rows.push(`<li><span class="contact-label">Email</span><a href="${mailHref}">${safeEmail}</a></li>`);
+    items.push(`<a href="${phoneHref}">${safePhone}</a>`);
   }
 
   if (location) {
-    rows.push(`<li><span class="contact-label">Location</span><span>${escapeHtml(location)}</span></li>`);
+    items.push(`<span>${escapeHtml(location)}</span>`);
   }
 
   const normalizedLinks = Array.isArray(links)
     ? links.map((link) => (typeof link === 'string' ? link.trim() : '')).filter(Boolean)
     : [];
 
-  if (normalizedLinks.length) {
-    const link = normalizedLinks[0];
+  normalizedLinks.slice(0, 2).forEach((link) => {
     const href = /^https?:\/\//i.test(link) ? link : `https://${link}`;
-    rows.push(`<li><span class="contact-label">Website</span><a href="${escapeHtml(href)}">${escapeHtml(link)}</a></li>`);
+    items.push(`<a href="${escapeHtml(href)}">${escapeHtml(link)}</a>`);
+  });
+
+  if (!items.length) {
+    return '<p class="meta-line muted">Contact information unavailable.</p>';
   }
 
-  if (!rows.length) {
-    return '<p class="muted">Contact information unavailable.</p>';
-  }
-
-  return `<ul class="contact-list">${rows.join('')}</ul>`;
+  return `<div class="meta-line">${items.join('<span class="meta-sep"></span>')}</div>`;
 };
 
-const renderSkills = (skills = []) => {
+const renderSkillChips = (skills = []) => {
   const validSkills = Array.isArray(skills)
     ? skills.map((skill) => (typeof skill === 'string' ? skill.trim() : '')).filter(Boolean)
     : [];
@@ -82,7 +65,7 @@ const renderSkills = (skills = []) => {
     return '<p class="muted">Skills available upon request.</p>';
   }
 
-  return `<ul class="dot-list">${validSkills.map((skill) => `<li>${escapeHtml(skill)}</li>`).join('')}</ul>`;
+  return `<div class="chip-grid">${validSkills.map((skill) => `<span class="chip">${escapeHtml(skill)}</span>`).join('')}</div>`;
 };
 
 const renderLanguages = (languages = []) => {
@@ -98,7 +81,7 @@ const renderLanguages = (languages = []) => {
       const name = escapeHtml(entry.name || '');
       const fluency = escapeHtml(entry.fluency || entry.proficiency || '');
       if (!name && !fluency) return '';
-      return `<li>${name}${fluency ? ` — ${fluency}` : ''}</li>`;
+      return `<li><span>${name || 'Language'}</span>${fluency ? `<strong>${fluency}</strong>` : ''}</li>`;
     })
     .filter(Boolean);
 
@@ -106,7 +89,7 @@ const renderLanguages = (languages = []) => {
     return '<p class="muted">Languages not specified.</p>';
   }
 
-  return `<ul class="dot-list">${rows.join('')}</ul>`;
+  return `<ul class="compact-list">${rows.join('')}</ul>`;
 };
 
 const renderEducation = (education = []) => {
@@ -118,14 +101,19 @@ const renderEducation = (education = []) => {
     const institution = escapeHtml(entry.institution || 'Institution');
     const credential = escapeHtml(entry.credential || '');
     const years = escapeHtml(entry.years || '');
-    const details = entry.details ? `<p class="edu-notes">${escapeHtml(entry.details)}</p>` : '';
+    const details = entry.details ? `<p class="item-notes">${escapeHtml(entry.details)}</p>` : '';
 
     return `
-      <article class="edu-item">
-        <div class="edu-years">${years}</div>
-        <div class="edu-body">
-          <h4>${institution}</h4>
-          ${credential ? `<p class="edu-credential">${credential}</p>` : ''}
+      <article class="timeline-item compact">
+        <div class="timeline-rail">
+          <span class="timeline-dot"></span>
+        </div>
+        <div class="timeline-content">
+          <div class="item-topline">
+            <h3>${institution}</h3>
+            ${years ? `<span class="item-years">${years}</span>` : ''}
+          </div>
+          ${credential ? `<p class="item-subtitle">${credential}</p>` : ''}
           ${details}
         </div>
       </article>
@@ -142,31 +130,34 @@ const renderExperience = (experiences = []) => {
     const company = escapeHtml(entry.company || 'Company');
     const role = escapeHtml(entry.role || 'Role');
     const years = escapeHtml(entry.years || '');
-    const bullets = toBulletList(entry.summary || '');
-    const summary = bullets || toParagraphs(entry.summary || '');
 
     return `
-      <article class="experience-card">
-        <div class="experience-header">
-          <div>
-            <h4>${company}</h4>
-            <p class="role">${role}</p>
-          </div>
-          <span class="years">${years}</span>
+      <article class="timeline-item">
+        <div class="timeline-rail">
+          <span class="timeline-dot"></span>
         </div>
-        <div class="experience-body">
-          ${summary || '<p class="muted">Details unavailable.</p>'}
+        <div class="timeline-content">
+          <div class="item-topline">
+            <div>
+              <h3>${role}</h3>
+              <p class="item-subtitle">${company}</p>
+            </div>
+            ${years ? `<span class="item-years">${years}</span>` : ''}
+          </div>
+          ${toBulletList(entry.summary || '')}
         </div>
       </article>
     `;
   }).join('');
 };
 
-const renderBadgeHeading = (label, letter) => `
-  <div class="section-heading">
-    <span class="section-icon">${letter}</span>
-    <span>${escapeHtml(label)}</span>
-  </div>
+const renderSection = (label, body, options = {}) => `
+  <section class="section ${options.compact ? 'section-compact' : ''}">
+    <div class="section-title">${escapeHtml(label)}</div>
+    <div class="section-body">
+      ${body}
+    </div>
+  </section>
 `;
 
 function renderResumeHtml({
@@ -178,11 +169,14 @@ function renderResumeHtml({
   languages = [],
 } = {}) {
   const name = escapeHtml(personalInfo.name || 'Candidate Name');
-  const roleLine = escapeHtml(personalInfo.title || 'Software Developer');
-  const monogram = deriveMonogram(personalInfo.name);
+  const roleLine = escapeHtml(
+    personalInfo.title
+      || experiences[0]?.role
+      || 'Professional Resume'
+  );
   const summaryMarkup = toParagraphs(aboutMe || 'No tailored summary generated.');
-  const contactMarkup = renderContactDetails(personalInfo);
-  const skillsMarkup = renderSkills(skills);
+  const contactMarkup = renderContactRow(personalInfo);
+  const skillsMarkup = renderSkillChips(skills);
   const educationMarkup = renderEducation(education);
   const languagesMarkup = renderLanguages(languages);
   const experienceMarkup = renderExperience(experiences);
@@ -191,298 +185,307 @@ function renderResumeHtml({
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>${name} — Resume</title>
+    <title>${name} - Resume</title>
     <style>
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
       * {
         box-sizing: border-box;
       }
+      html {
+        background: #eef1eb;
+      }
       body {
         margin: 0;
-        padding: 20px;
-        background: #f4f4f6;
-        font-family: "Libre Baskerville", "Times New Roman", serif;
-        color: #1f2933;
-        font-size: 13px;
-      }
-      .page {
-        max-width: 1020px;
-        margin: 0 auto;
+        background:
+          radial-gradient(circle at top left, rgba(151, 179, 132, 0.18), transparent 28%),
+          linear-gradient(180deg, #f4f7f1 0%, #eef1eb 100%);
+        color: #1f2937;
+        font-family: "Aptos", "Segoe UI", sans-serif;
+        font-size: 12px;
+        line-height: 1.45;
       }
       .sheet {
+        width: 100%;
         background: #ffffff;
-        border-radius: 16px;
-        box-shadow: 0 25px 60px rgba(15, 23, 42, 0.12);
+        border: 1px solid #d8dfd2;
+        border-radius: 22px;
         overflow: hidden;
+        box-shadow: 0 24px 60px rgba(31, 41, 55, 0.10);
       }
-      .masthead {
-        border-bottom: 2px solid #d6d7da;
-        padding: 36px 40px 26px;
-        position: relative;
-        text-align: center;
+      .hero {
+        padding: 22px 28px 16px;
+        background:
+          linear-gradient(135deg, #203a2a 0%, #335341 58%, #6c8a65 100%);
+        color: #f8faf8;
       }
-      .masthead::after {
-        content: "${monogram}";
-        position: absolute;
-        top: 18px;
-        left: 50%;
-        transform: translateX(-50%);
-        font-size: 110px;
-        font-weight: 300;
-        color: rgba(15, 23, 42, 0.06);
-        letter-spacing: 0.16em;
-        pointer-events: none;
-      }
-      .masthead h1 {
-        margin: 0;
-        font-size: 38px;
-        letter-spacing: 0.28em;
-      }
-      .masthead p {
-        margin: 10px 0 0;
-        font-size: 13px;
-        letter-spacing: 0.32em;
-        text-transform: uppercase;
-        color: #545b67;
-      }
-      .layout {
-        display: grid;
-        grid-template-columns: 260px 1fr;
-        column-gap: 24px;
-        min-height: 100%;
-      }
-      .sidebar {
-        background: #f9f9fb;
-        border-right: 1px solid #ececf0;
-        padding: 26px 26px 28px;
-      }
-      .main-column {
-        padding: 28px 36px 32px;
-      }
-      .info-card,
-      .main-section {
-        margin-bottom: 20px;
-      }
-      .section-heading {
+      .hero-top {
         display: flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 14px;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: #6d7381;
-        margin-bottom: 14px;
+        justify-content: flex-start;
+        gap: 16px;
+        align-items: flex-start;
       }
-      .section-icon {
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        border: 2px solid #b8bcc8;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 600;
-        color: #4b5563;
-        background: #fff;
+      .hero h1 {
+        margin: 0;
+        font-size: 26px;
+        line-height: 1.05;
+        letter-spacing: 0.02em;
+      }
+      .hero-role {
+        margin: 6px 0 0;
+        color: rgba(248, 250, 248, 0.84);
         font-size: 12px;
-      }
-      .contact-list,
-      .dot-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-      }
-      .contact-list li {
-        display: flex;
-        flex-direction: column;
-        margin-bottom: 14px;
-        font-size: 13px;
-      }
-      .contact-label {
         text-transform: uppercase;
-        font-size: 10px;
-        letter-spacing: 0.22em;
-        color: #9aa0ac;
-        margin-bottom: 3px;
+        letter-spacing: 0.18em;
       }
-      .contact-list a {
-        color: #1f2933;
+      .meta-line {
+        margin-top: 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 0;
+        color: rgba(248, 250, 248, 0.92);
+        font-size: 11px;
+      }
+      .meta-line a,
+      .meta-line span {
+        color: inherit;
         text-decoration: none;
       }
-      .dot-list li {
-        position: relative;
-        padding-left: 14px;
-        margin-bottom: 8px;
-        font-size: 13px;
-      }
-      .dot-list li::before {
-        content: "";
-        width: 4px;
-        height: 4px;
+      .meta-sep {
+        width: 5px;
+        height: 5px;
+        margin: 0 10px;
         border-radius: 50%;
-        background: #4c5762;
-        position: absolute;
-        left: 0;
-        top: 7px;
+        background: rgba(255, 255, 255, 0.55);
+        align-self: center;
       }
-      .edu-item {
+      .content {
+        padding: 20px 24px 22px;
+      }
+      .section {
+        margin-bottom: 16px;
+      }
+      .section:last-child {
+        margin-bottom: 0;
+      }
+      .section-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: #335341;
+      }
+      .section-title::before {
+        content: "";
+        width: 28px;
+        height: 1px;
+        background: #88a07c;
+      }
+      .section-body p {
+        margin: 0 0 7px;
+      }
+      .section-body p:last-child {
+        margin-bottom: 0;
+      }
+      .chip-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .chip {
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #eff4ec;
+        border: 1px solid #dbe6d5;
+        color: #294130;
+        font-size: 11px;
+        line-height: 1.2;
+      }
+      .two-column {
         display: grid;
-        grid-template-columns: 74px 1fr;
+        grid-template-columns: minmax(0, 1.6fr) minmax(220px, 0.9fr);
+        gap: 18px;
+        align-items: start;
+      }
+      .rail-card {
+        border: 1px solid #e4ebe0;
+        border-radius: 16px;
+        background: #fbfcfa;
+        padding: 14px 14px 12px;
+      }
+      .timeline-item {
+        display: grid;
+        grid-template-columns: 18px minmax(0, 1fr);
         gap: 12px;
-        padding-bottom: 12px;
-        border-bottom: 1px solid #e5e7eb;
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin-bottom: 14px;
+      }
+      .timeline-item:last-child {
+        margin-bottom: 0;
+      }
+      .timeline-item.compact {
         margin-bottom: 12px;
       }
-      .edu-item:last-of-type {
-        border-bottom: none;
-        margin-bottom: 0;
-        padding-bottom: 0;
+      .timeline-rail {
+        position: relative;
+        min-height: 100%;
       }
-      .edu-years {
-        font-weight: 600;
-        color: #4c5762;
-        font-size: 12px;
+      .timeline-rail::after {
+        content: "";
+        position: absolute;
+        top: 10px;
+        bottom: -18px;
+        left: 7px;
+        width: 1px;
+        background: #d4decf;
       }
-      .edu-body h4 {
+      .timeline-item:last-child .timeline-rail::after {
+        display: none;
+      }
+      .timeline-dot {
+        position: absolute;
+        top: 4px;
+        left: 1px;
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #31503d, #88a07c);
+        box-shadow: 0 0 0 3px #edf3e9;
+      }
+      .timeline-content {
+        padding: 14px 15px 12px;
+        border: 1px solid #e6ece2;
+        border-radius: 16px;
+        background: #ffffff;
+      }
+      .item-topline {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: flex-start;
+        margin-bottom: 8px;
+      }
+      .item-topline > div,
+      .item-topline > h3 {
+        min-width: 0;
+      }
+      .item-topline h3 {
         margin: 0;
-        font-size: 16px;
+        font-size: 15px;
+        line-height: 1.2;
+        color: #1c2b22;
       }
-      .edu-credential {
-        margin: 3px 0;
-        color: #4b5563;
-        font-size: 13px;
+      .item-subtitle {
+        margin: 3px 0 0;
+        color: #55635a;
+        font-size: 11px;
       }
-      .edu-notes {
-        margin: 4px 0 0;
-        font-size: 12px;
-        color: #6b7280;
+      .item-years {
+        flex-shrink: 0;
+        padding: 5px 9px;
+        border-radius: 999px;
+        background: #edf3e9;
+        color: #294130;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        line-height: 1.3;
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        text-align: center;
       }
-      .main-section .section-heading {
-        color: #4b4f58;
+      .item-notes {
+        color: #5f6d64;
+        font-size: 11px;
       }
       .bullet-list {
         margin: 0;
         padding-left: 16px;
       }
       .bullet-list li {
-        margin-bottom: 4px;
-        line-height: 1.45;
-        font-size: 13px;
+        margin-bottom: 5px;
       }
-      .experience-grid {
-        column-count: 1;
-        column-gap: 16px;
-      }
-      @media (min-width: 900px) {
-        .experience-grid {
-          column-count: 2;
-        }
-      }
-      @media print {
-        .experience-grid {
-          column-count: 2;
-        }
-      }
-      .experience-card {
-        border: 1px solid #e5e7eb;
-        border-radius: 14px;
-        padding: 16px 18px;
-        margin-bottom: 12px;
-        background: #fff;
-        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.05);
-        break-inside: avoid;
-      }
-      .experience-card:last-of-type {
+      .bullet-list li:last-child {
         margin-bottom: 0;
       }
-      .experience-header {
+      .compact-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .compact-list li {
         display: flex;
         justify-content: space-between;
         gap: 10px;
-        flex-wrap: wrap;
-        border-bottom: 1px solid #ececf0;
-        padding-bottom: 10px;
-        margin-bottom: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid #e5ece1;
       }
-      .experience-header h4 {
-        margin: 0;
-        font-size: 18px;
-        letter-spacing: 0.03em;
+      .compact-list li:first-child {
+        padding-top: 0;
       }
-      .role {
-        margin: 4px 0 0;
-        color: #4b5563;
-        font-size: 13px;
+      .compact-list li:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
       }
-      .years {
-        font-weight: 600;
-        color: #374151;
-        font-size: 12px;
-      }
-      .experience-body p {
-        margin: 0 0 6px;
-        line-height: 1.5;
-        font-size: 13px;
+      .compact-list strong {
+        color: #294130;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
       }
       .muted {
-        color: #9aa0ac;
-        font-size: 12px;
+        color: #7b8a80;
       }
       @media print {
+        html,
         body {
-          padding: 0;
           background: #ffffff;
         }
         .sheet {
+          border: none;
           border-radius: 0;
-          box-shadow: none;
-        }
-        .experience-card {
           box-shadow: none;
         }
       }
     </style>
   </head>
   <body>
-    <div class="page">
-      <article class="sheet">
-        <header class="masthead">
-          <h1>${name}</h1>
-          <p>${roleLine}</p>
-        </header>
-        <div class="layout">
-          <aside class="sidebar">
-            <section class="info-card">
-              ${renderBadgeHeading('Contact', 'C')}
-              ${contactMarkup}
-            </section>
-            <section class="info-card">
-              ${renderBadgeHeading('Education', 'E')}
-              ${educationMarkup}
-            </section>
-            <section class="info-card">
-              ${renderBadgeHeading('Skills', 'S')}
-              ${skillsMarkup}
-            </section>
-            <section class="info-card">
-              ${renderBadgeHeading('Languages', 'L')}
-              ${languagesMarkup}
-            </section>
-          </aside>
-          <section class="main-column">
-            <section class="main-section">
-              ${renderBadgeHeading('Profile Summary', 'P')}
-              ${summaryMarkup}
-            </section>
-            <section class="main-section">
-          ${renderBadgeHeading('Work Experience', 'W')}
-              <div class="experience-grid">
-                ${experienceMarkup}
-              </div>
-            </section>
-          </section>
+    <article class="sheet">
+      <header class="hero">
+        <div class="hero-top">
+          <div>
+            <h1>${name}</h1>
+            <p class="hero-role">${roleLine}</p>
+          </div>
         </div>
-      </article>
-    </div>
+        ${contactMarkup}
+      </header>
+      <main class="content">
+        ${renderSection('Professional Summary', summaryMarkup)}
+        ${renderSection('Core Skills', skillsMarkup)}
+        <div class="two-column">
+          <div>
+            ${renderSection('Experience', experienceMarkup)}
+          </div>
+          <div>
+            <div class="rail-card">
+              ${renderSection('Education', educationMarkup, { compact: true })}
+              ${renderSection('Languages', languagesMarkup, { compact: true })}
+            </div>
+          </div>
+        </div>
+      </main>
+    </article>
   </body>
 </html>`;
 }
