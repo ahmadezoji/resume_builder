@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 const formidable = require('formidable');
 const pdfParse = require('pdf-parse');
-const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const { renderResumeHtml } = require('./templates/resumeTemplate');
 const { generatePdfFromHtml } = require('./utils/pdfGenerator');
 
@@ -170,138 +169,6 @@ function normalizeExperiences(rawExperiences) {
 function formatExperienceForDisplay(entry) {
   const header = `${entry.company} — ${entry.role} (${entry.years})`.replace(/\s+/g, ' ').trim();
   return entry.summary ? `${header}\n${entry.summary}` : header;
-}
-
-function wrapLines(text, font, fontSize, maxWidth) {
-  if (!text) return [''];
-  const words = text.split(/\s+/);
-  const lines = [];
-  let currentLine = '';
-
-  words.forEach((word) => {
-    const nextLine = currentLine ? `${currentLine} ${word}` : word;
-    if (font.widthOfTextAtSize(nextLine, fontSize) <= maxWidth) {
-      currentLine = nextLine;
-    } else {
-      if (currentLine) lines.push(currentLine);
-      currentLine = word;
-    }
-  });
-
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-
-  return lines.length ? lines : [''];
-}
-
-async function appendTailoredResumeToPdf(originalBuffer, { personalInfo = {}, aboutMe = '', skills = [], experiences = [] }) {
-  if (!originalBuffer) {
-    throw new Error('Original PDF buffer is required to preserve formatting.');
-  }
-
-  const pdfDoc = await PDFDocument.load(originalBuffer);
-  let page = pdfDoc.addPage();
-  let { width, height } = page.getSize();
-  const margin = 50;
-  let cursorY = height - margin;
-
-  const bodyFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const headingFontSize = 16;
-  const bodyFontSize = 11;
-  const headingColor = rgb(0.05, 0.25, 0.55);
-  const contentWidth = width - margin * 2;
-
-  const ensureSpace = (needed) => {
-    if (cursorY - needed <= margin) {
-      page = pdfDoc.addPage();
-      ({ width, height } = page.getSize());
-      cursorY = height - margin;
-    }
-  };
-
-  const drawHeading = (text) => {
-    ensureSpace(headingFontSize + 8);
-    cursorY -= headingFontSize;
-    page.drawText(text, {
-      x: margin,
-      y: cursorY,
-      size: headingFontSize,
-      font: boldFont,
-      color: headingColor,
-    });
-    cursorY -= 8;
-  };
-
-  const drawParagraph = (text) => {
-    const lines = wrapLines(text, bodyFont, bodyFontSize, contentWidth);
-    lines.forEach((line) => {
-      ensureSpace(bodyFontSize + 4);
-      cursorY -= bodyFontSize;
-      page.drawText(line, {
-        x: margin,
-        y: cursorY,
-        size: bodyFontSize,
-        font: bodyFont,
-      });
-      cursorY -= 4;
-    });
-    cursorY -= 4;
-  };
-
-  drawHeading('Tailored Summary');
-  drawParagraph(aboutMe || 'No summary generated.');
-
-  drawHeading('Highlighted Skills');
-  drawParagraph(skills.length ? skills.join(', ') : 'No skills detected.');
-
-  drawHeading('Optimized Experience');
-  if (experiences.length) {
-    experiences.forEach((entry) => {
-      const header = `${entry.company} — ${entry.role} (${entry.years})`;
-      ensureSpace(bodyFontSize * 2);
-      cursorY -= bodyFontSize;
-      page.drawText(header, {
-        x: margin,
-        y: cursorY,
-        size: bodyFontSize,
-        font: boldFont,
-      });
-      cursorY -= 6;
-      if (entry.summary) {
-        const lines = wrapLines(entry.summary, bodyFont, bodyFontSize, contentWidth);
-        lines.forEach((line) => {
-          ensureSpace(bodyFontSize + 3);
-          cursorY -= bodyFontSize;
-          page.drawText(line, {
-            x: margin + 12,
-            y: cursorY,
-            size: bodyFontSize,
-            font: bodyFont,
-          });
-          cursorY -= 3;
-        });
-        cursorY -= 4;
-      } else {
-        cursorY -= 4;
-      }
-    });
-  } else {
-    drawParagraph('No experience entries detected.');
-  }
-
-  drawHeading('Contact snapshot');
-  const contactParts = [
-    personalInfo.name,
-    personalInfo.email,
-    personalInfo.phone,
-    personalInfo.location,
-  ].filter(Boolean);
-  drawParagraph(contactParts.length ? contactParts.join(' | ') : 'No personal info detected.');
-
-  const updatedBytes = await pdfDoc.save();
-  return Buffer.from(updatedBytes);
 }
 
 function serveStatic(req, res) {
@@ -479,29 +346,18 @@ async function handleResumeUpload(req, res) {
       languages: Array.isArray(parsed.languages) ? parsed.languages : [],
     };
 
-    const resumeFileName = buildExportFileName('resume', tailored.personalInfo?.name, 'pdf');
+    const resumeFileName = 'saam_ezoji.pdf';
     const coverLetterFileName = buildExportFileName('cover', tailored.personalInfo?.name, 'txt');
 
-    let pdfBuffer;
-    try {
-      const resumeHtml = renderResumeHtml({
-        personalInfo: tailored.personalInfo,
-        aboutMe: tailored.aboutMe,
-        skills: tailored.skills,
-        experiences: tailored.experiences,
-        education: tailored.education,
-        languages: tailored.languages,
-      });
-      pdfBuffer = await generatePdfFromHtml(resumeHtml);
-    } catch (htmlError) {
-      console.error('Failed to render HTML template, falling back to PDF append workflow.', htmlError);
-      try {
-        pdfBuffer = await appendTailoredResumeToPdf(originalPdfBuffer, tailored);
-      } catch (pdfError) {
-        console.error('Failed to append tailored content to PDF, returning original file.', pdfError);
-        pdfBuffer = originalPdfBuffer;
-      }
-    }
+    const resumeHtml = renderResumeHtml({
+      personalInfo: tailored.personalInfo,
+      aboutMe: tailored.aboutMe,
+      skills: tailored.skills,
+      experiences: tailored.experiences,
+      education: tailored.education,
+      languages: tailored.languages,
+    });
+    const pdfBuffer = await generatePdfFromHtml(resumeHtml);
 
     const coverLetterFile = Buffer.from(tailored.coverLetter || 'No cover letter generated.', 'utf8').toString('base64');
 
