@@ -1,3 +1,8 @@
+const {
+  normalizeOptionalText,
+  normalizeTextLines,
+} = require('../utils/contentSanitizer');
+
 const escapeHtml = (value = '') => String(value)
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -5,160 +10,195 @@ const escapeHtml = (value = '') => String(value)
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
-const normalizeTextLines = (text = '') => String(text)
-  .split(/\n+/)
-  .map((line) => line.replace(/^[•\-\u2022]+\s*/, '').trim())
-  .filter(Boolean);
-
 const toParagraphs = (text = '') => {
   const lines = normalizeTextLines(text);
-  if (!lines.length) return '<p class="muted">Not provided.</p>';
+  if (!lines.length) return '';
   return lines.map((line) => `<p>${escapeHtml(line)}</p>`).join('');
 };
 
 const toBulletList = (text = '') => {
   const lines = normalizeTextLines(text);
-  if (!lines.length) return '<p class="muted">Details unavailable.</p>';
-  return `<ul class="bullet-list">${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`;
+  if (!lines.length) return '';
+  return `<div class="bullet-list">${lines.map((line) => `<p class="bullet-line">${escapeHtml(line)}</p>`).join('')}</div>`;
 };
 
 const renderContactRow = ({ email, phone, location, links = [] } = {}) => {
   const items = [];
+  const safeEmailValue = normalizeOptionalText(email);
+  const safePhoneValue = normalizeOptionalText(phone);
+  const safeLocationValue = normalizeOptionalText(location);
 
-  if (email) {
-    const safeEmail = escapeHtml(email);
-    items.push(`<a href="mailto:${safeEmail}">${safeEmail}</a>`);
+  if (safeEmailValue) {
+    const safeEmail = escapeHtml(safeEmailValue);
+    items.push(`<a class="contact-chip" href="mailto:${safeEmail}">${safeEmail}</a>`);
   }
 
-  if (phone) {
-    const safePhone = escapeHtml(phone);
-    const phoneHref = escapeHtml(`tel:${String(phone).replace(/[^+\d]/g, '') || phone}`);
-    items.push(`<a href="${phoneHref}">${safePhone}</a>`);
+  if (safePhoneValue) {
+    const safePhone = escapeHtml(safePhoneValue);
+    const phoneHref = escapeHtml(`tel:${String(safePhoneValue).replace(/[^+\d]/g, '') || safePhoneValue}`);
+    items.push(`<a class="contact-chip" href="${phoneHref}">${safePhone}</a>`);
   }
 
-  if (location) {
-    items.push(`<span>${escapeHtml(location)}</span>`);
+  if (safeLocationValue) {
+    items.push(`<span class="contact-chip">${escapeHtml(safeLocationValue)}</span>`);
   }
 
   const normalizedLinks = Array.isArray(links)
-    ? links.map((link) => (typeof link === 'string' ? link.trim() : '')).filter(Boolean)
+    ? links.map(normalizeOptionalText).filter(Boolean)
     : [];
 
   normalizedLinks.slice(0, 2).forEach((link) => {
     const href = /^https?:\/\//i.test(link) ? link : `https://${link}`;
-    items.push(`<a href="${escapeHtml(href)}">${escapeHtml(link)}</a>`);
+    items.push(`<a class="contact-chip" href="${escapeHtml(href)}">${escapeHtml(link)}</a>`);
   });
 
   if (!items.length) {
-    return '<p class="meta-line muted">Contact information unavailable.</p>';
+    return '';
   }
 
-  return `<div class="meta-line">${items.join('<span class="meta-sep"></span>')}</div>`;
+  return `<div class="contact-list">${items.join('')}</div>`;
 };
 
 const renderSkillChips = (skills = []) => {
   const validSkills = Array.isArray(skills)
-    ? skills.map((skill) => (typeof skill === 'string' ? skill.trim() : '')).filter(Boolean)
+    ? skills.map(normalizeOptionalText).filter(Boolean)
     : [];
 
   if (!validSkills.length) {
-    return '<p class="muted">Skills available upon request.</p>';
+    return '';
   }
 
-  return `<div class="chip-grid">${validSkills.map((skill) => `<span class="chip">${escapeHtml(skill)}</span>`).join('')}</div>`;
+  return `<div class="skill-cloud">${validSkills.map((skill) => `<span class="skill-pill">${escapeHtml(skill)}</span>`).join('')}</div>`;
 };
 
 const renderLanguages = (languages = []) => {
   if (!Array.isArray(languages) || !languages.length) {
-    return '<p class="muted">Languages not specified.</p>';
+    return '';
   }
 
   const rows = languages
     .map((entry) => {
       if (typeof entry === 'string') {
-        return `<li>${escapeHtml(entry)}</li>`;
+        const language = normalizeOptionalText(entry);
+        return language ? `<li><span>${escapeHtml(language)}</span></li>` : '';
       }
-      const name = escapeHtml(entry.name || '');
-      const fluency = escapeHtml(entry.fluency || entry.proficiency || '');
+
+      const name = normalizeOptionalText(entry.name);
+      const fluency = normalizeOptionalText(entry.fluency || entry.proficiency);
       if (!name && !fluency) return '';
-      return `<li><span>${name || 'Language'}</span>${fluency ? `<strong>${fluency}</strong>` : ''}</li>`;
+
+      return `
+        <li>
+          ${name ? `<span>${escapeHtml(name)}</span>` : ''}
+          ${fluency ? `<strong>${escapeHtml(fluency)}</strong>` : ''}
+        </li>
+      `;
     })
     .filter(Boolean);
 
   if (!rows.length) {
-    return '<p class="muted">Languages not specified.</p>';
+    return '';
   }
 
-  return `<ul class="compact-list">${rows.join('')}</ul>`;
+  return `<ul class="detail-list">${rows.join('')}</ul>`;
 };
 
 const renderEducation = (education = []) => {
   if (!Array.isArray(education) || !education.length) {
-    return '<p class="muted">Education summary unavailable.</p>';
+    return '';
   }
 
-  return education.map((entry) => {
-    const institution = escapeHtml(entry.institution || 'Institution');
-    const credential = escapeHtml(entry.credential || '');
-    const years = escapeHtml(entry.years || '');
-    const details = entry.details ? `<p class="item-notes">${escapeHtml(entry.details)}</p>` : '';
+  const cards = education
+    .map((entry) => {
+      const institution = normalizeOptionalText(entry.institution);
+      const credential = normalizeOptionalText(entry.credential);
+      const years = normalizeOptionalText(entry.years);
+      const details = normalizeOptionalText(entry.details);
 
-    return `
-      <article class="timeline-item compact">
-        <div class="timeline-rail">
-          <span class="timeline-dot"></span>
-        </div>
-        <div class="timeline-content">
-          <div class="item-topline">
-            <h3>${institution}</h3>
-            ${years ? `<span class="item-years">${years}</span>` : ''}
-          </div>
-          ${credential ? `<p class="item-subtitle">${credential}</p>` : ''}
-          ${details}
-        </div>
-      </article>
-    `;
-  }).join('');
+      if (!institution && !credential && !years && !details) {
+        return '';
+      }
+
+      return `
+        <article class="mini-entry">
+          ${institution ? `<h3>${escapeHtml(institution)}</h3>` : ''}
+          ${credential || years ? `
+            <div class="mini-meta">
+              ${credential ? `<span>${escapeHtml(credential)}</span>` : ''}
+              ${years ? `<strong>${escapeHtml(years)}</strong>` : ''}
+            </div>
+          ` : ''}
+          ${details ? `<p class="entry-note">${escapeHtml(details)}</p>` : ''}
+        </article>
+      `;
+    })
+    .filter(Boolean);
+
+  if (!cards.length) {
+    return '';
+  }
+
+  return `<div class="mini-stack">${cards.join('')}</div>`;
 };
 
 const renderExperience = (experiences = []) => {
   if (!Array.isArray(experiences) || !experiences.length) {
-    return '<p class="muted">No work experiences were generated.</p>';
+    return '';
   }
 
-  return experiences.map((entry) => {
-    const company = escapeHtml(entry.company || 'Company');
-    const role = escapeHtml(entry.role || 'Role');
-    const years = escapeHtml(entry.years || '');
+  const cards = experiences
+    .map((entry) => {
+      const company = normalizeOptionalText(entry.company);
+      const role = normalizeOptionalText(entry.role);
+      const years = normalizeOptionalText(entry.years);
+      const summary = toBulletList(entry.summary || '');
 
-    return `
-      <article class="timeline-item">
-        <div class="timeline-rail">
-          <span class="timeline-dot"></span>
-        </div>
-        <div class="timeline-content">
-          <div class="item-topline">
-            <div>
-              <h3>${role}</h3>
-              <p class="item-subtitle">${company}</p>
+      if (!company && !role && !years && !summary) {
+        return '';
+      }
+
+      return `
+        <article class="experience-card">
+          ${role || company || years ? `
+            <div class="experience-head">
+              ${role || company ? `
+                <div class="experience-title-group">
+                  ${role ? `<h3>${escapeHtml(role)}</h3>` : ''}
+                  ${company ? `<p class="experience-company">${escapeHtml(company)}</p>` : ''}
+                </div>
+              ` : '<div></div>'}
+              ${years ? `<span class="item-years">${escapeHtml(years)}</span>` : ''}
             </div>
-            ${years ? `<span class="item-years">${years}</span>` : ''}
-          </div>
-          ${toBulletList(entry.summary || '')}
-        </div>
-      </article>
-    `;
-  }).join('');
+          ` : ''}
+          ${summary}
+        </article>
+      `;
+    })
+    .filter(Boolean);
+
+  if (!cards.length) {
+    return '';
+  }
+
+  return `<div class="experience-stack">${cards.join('')}</div>`;
 };
 
-const renderSection = (label, body, options = {}) => `
-  <section class="section ${options.compact ? 'section-compact' : ''}">
-    <div class="section-title">${escapeHtml(label)}</div>
-    <div class="section-body">
-      ${body}
-    </div>
-  </section>
-`;
+const renderSection = (label, body, options = {}) => {
+  if (!body) {
+    return '';
+  }
+
+  const tone = options.tone || 'main';
+
+  return `
+    <section class="section section-${tone}">
+      <div class="section-label">${escapeHtml(label)}</div>
+      <div class="section-body">
+        ${body}
+      </div>
+    </section>
+  `;
+};
 
 function renderResumeHtml({
   personalInfo = {},
@@ -168,283 +208,323 @@ function renderResumeHtml({
   education = [],
   languages = [],
 } = {}) {
-  const name = escapeHtml(personalInfo.name || 'Candidate Name');
-  const roleLine = escapeHtml(
-    personalInfo.title
-      || experiences[0]?.role
-      || 'Professional Resume'
-  );
-  const summaryMarkup = toParagraphs(aboutMe || 'No tailored summary generated.');
+  const name = normalizeOptionalText(personalInfo.name);
+  const roleLine = normalizeOptionalText(personalInfo.title) || normalizeOptionalText(experiences[0]?.role);
+  const summarySection = renderSection('Professional Summary', toParagraphs(aboutMe), { tone: 'main' });
   const contactMarkup = renderContactRow(personalInfo);
-  const skillsMarkup = renderSkillChips(skills);
-  const educationMarkup = renderEducation(education);
-  const languagesMarkup = renderLanguages(languages);
-  const experienceMarkup = renderExperience(experiences);
+  const skillsSection = renderSection('Technical Skills', renderSkillChips(skills), { tone: 'aside' });
+  const experienceSection = renderSection('Professional Experience', renderExperience(experiences), { tone: 'main' });
+  const educationSection = renderSection('Education', renderEducation(education), { tone: 'aside' });
+  const languagesSection = renderSection('Languages', renderLanguages(languages), { tone: 'aside' });
+  const heroIdentity = [
+    name ? `<h1>${escapeHtml(name)}</h1>` : '',
+    roleLine ? `<p class="hero-role">${escapeHtml(roleLine)}</p>` : '',
+    contactMarkup,
+  ].filter(Boolean).join('');
+  const headerMarkup = heroIdentity
+    ? `
+      <header class="hero">
+        <div class="hero-identity">${heroIdentity}</div>
+      </header>
+    `
+    : '';
+
+  const contentMarkup = [
+    summarySection,
+    skillsSection,
+    experienceSection,
+    educationSection,
+    languagesSection,
+  ].filter(Boolean).join('');
+
+  const titleText = escapeHtml(name || roleLine || 'Resume');
 
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>${name} - Resume</title>
+    <title>${titleText}</title>
     <style>
       @page {
         size: A4;
-        margin: 12mm;
+        margin: 9mm;
       }
       * {
         box-sizing: border-box;
       }
       html {
-        background: #eef1eb;
+        background: #f1ede7;
       }
       body {
         margin: 0;
-        background:
-          radial-gradient(circle at top left, rgba(151, 179, 132, 0.18), transparent 28%),
-          linear-gradient(180deg, #f4f7f1 0%, #eef1eb 100%);
+        background: #f1ede7;
         color: #1f2937;
         font-family: "Aptos", "Segoe UI", sans-serif;
         font-size: 12px;
-        line-height: 1.45;
+        line-height: 1.5;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
       .sheet {
         width: 100%;
-        background: #ffffff;
-        border: 1px solid #d8dfd2;
-        border-radius: 22px;
         overflow: hidden;
-        box-shadow: 0 24px 60px rgba(31, 41, 55, 0.10);
+        border: 1px solid #ddd5ca;
+        border-radius: 22px;
+        background: #fffdfa;
+        box-shadow: 0 14px 32px rgba(24, 35, 29, 0.08);
       }
       .hero {
-        padding: 22px 28px 16px;
-        background:
-          linear-gradient(135deg, #203a2a 0%, #335341 58%, #6c8a65 100%);
-        color: #f8faf8;
-      }
-      .hero-top {
-        display: flex;
-        justify-content: flex-start;
-        gap: 16px;
-        align-items: flex-start;
+        padding: 24px 28px 18px;
+        background: linear-gradient(135deg, #143126 0%, #1e4438 62%, #7a5b35 100%);
+        color: #fbf7f1;
       }
       .hero h1 {
         margin: 0;
-        font-size: 26px;
-        line-height: 1.05;
-        letter-spacing: 0.02em;
+        color: #ffffff;
+        font-family: "Georgia", "Times New Roman", serif;
+        font-size: 31px;
+        line-height: 0.98;
+        letter-spacing: 0.03em;
       }
       .hero-role {
-        margin: 6px 0 0;
-        color: rgba(248, 250, 248, 0.84);
-        font-size: 12px;
+        margin: 8px 0 0;
+        color: rgba(251, 247, 241, 0.88);
+        font-size: 11.5px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
-        letter-spacing: 0.18em;
       }
-      .meta-line {
-        margin-top: 14px;
+      .contact-list {
+        margin-top: 12px;
         display: flex;
         flex-wrap: wrap;
-        gap: 8px 0;
-        color: rgba(248, 250, 248, 0.92);
-        font-size: 11px;
+        gap: 7px;
       }
-      .meta-line a,
-      .meta-line span {
+      .contact-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 26px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.12);
         color: inherit;
         text-decoration: none;
-      }
-      .meta-sep {
-        width: 5px;
-        height: 5px;
-        margin: 0 10px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.55);
-        align-self: center;
+        font-size: 10.5px;
       }
       .content {
-        padding: 20px 24px 22px;
+        padding: 16px 20px 20px;
       }
       .section {
-        margin-bottom: 16px;
+        margin-bottom: 12px;
       }
       .section:last-child {
         margin-bottom: 0;
       }
-      .section-title {
-        display: inline-flex;
+      .section-main {
+        break-inside: auto;
+        page-break-inside: auto;
+      }
+      .section-aside {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .section-label {
+        display: flex;
         align-items: center;
         gap: 10px;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
+        color: #173328;
         font-size: 10px;
         font-weight: 700;
         letter-spacing: 0.2em;
         text-transform: uppercase;
-        color: #335341;
       }
-      .section-title::before {
+      .section-main .section-label::before {
         content: "";
-        width: 28px;
-        height: 1px;
-        background: #88a07c;
-      }
-      .section-body p {
-        margin: 0 0 7px;
-      }
-      .section-body p:last-child {
-        margin-bottom: 0;
-      }
-      .chip-grid {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-      .chip {
-        padding: 6px 10px;
+        width: 38px;
+        height: 2px;
         border-radius: 999px;
-        background: #eff4ec;
-        border: 1px solid #dbe6d5;
-        color: #294130;
-        font-size: 11px;
-        line-height: 1.2;
+        background: linear-gradient(90deg, #1e4c3d, #ab8452);
       }
-      .two-column {
-        display: grid;
-        grid-template-columns: minmax(0, 1.6fr) minmax(220px, 0.9fr);
-        gap: 18px;
-        align-items: start;
-      }
-      .rail-card {
-        border: 1px solid #e4ebe0;
+      .section-aside {
+        padding: 12px 13px 13px;
+        border: 1px solid #e8dece;
         border-radius: 16px;
-        background: #fbfcfa;
-        padding: 14px 14px 12px;
+        background: #fffdfa;
       }
-      .timeline-item {
-        display: grid;
-        grid-template-columns: 18px minmax(0, 1fr);
-        gap: 12px;
-        break-inside: avoid;
-        page-break-inside: avoid;
-        margin-bottom: 14px;
-      }
-      .timeline-item:last-child {
-        margin-bottom: 0;
-      }
-      .timeline-item.compact {
-        margin-bottom: 12px;
-      }
-      .timeline-rail {
-        position: relative;
-        min-height: 100%;
-      }
-      .timeline-rail::after {
-        content: "";
-        position: absolute;
-        top: 10px;
-        bottom: -18px;
-        left: 7px;
-        width: 1px;
-        background: #d4decf;
-      }
-      .timeline-item:last-child .timeline-rail::after {
-        display: none;
-      }
-      .timeline-dot {
-        position: absolute;
-        top: 4px;
-        left: 1px;
-        width: 13px;
-        height: 13px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #31503d, #88a07c);
-        box-shadow: 0 0 0 3px #edf3e9;
-      }
-      .timeline-content {
-        padding: 14px 15px 12px;
-        border: 1px solid #e6ece2;
-        border-radius: 16px;
-        background: #ffffff;
-      }
-      .item-topline {
-        display: flex;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 16px;
-        align-items: flex-start;
+      .section-aside .section-label {
         margin-bottom: 8px;
       }
-      .item-topline > div,
-      .item-topline > h3 {
+      .section-aside .section-label::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #1f4b3d, #ab8452);
+      }
+      .skill-cloud {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+      .skill-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 9px;
+        border-radius: 10px;
+        border: 1px solid #ddd1bf;
+        background: #f2ece2;
+        color: #1f3e33;
+        font-size: 10.5px;
+        font-weight: 600;
+        line-height: 1.25;
+      }
+      .experience-stack {
+        display: grid;
+        gap: 10px;
+      }
+      .experience-card {
+        padding: 12px 14px 12px;
+        border: 1px solid #e7dccb;
+        border-left: 4px solid #1e4c3d;
+        border-radius: 16px;
+        background: #ffffff;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .experience-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        margin-bottom: 6px;
+      }
+      .experience-title-group {
         min-width: 0;
       }
-      .item-topline h3 {
+      .experience-title-group h3 {
         margin: 0;
+        color: #132a22;
         font-size: 15px;
-        line-height: 1.2;
-        color: #1c2b22;
+        line-height: 1.18;
       }
-      .item-subtitle {
+      .experience-company {
         margin: 3px 0 0;
-        color: #55635a;
-        font-size: 11px;
+        color: #687368;
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
       }
       .item-years {
         flex-shrink: 0;
-        padding: 5px 9px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 24px;
+        max-width: 100%;
+        padding: 4px 9px;
         border-radius: 999px;
-        background: #edf3e9;
-        color: #294130;
+        background: #efe5d7;
+        color: #6a4a26;
         font-size: 10px;
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        line-height: 1.3;
-        max-width: 100%;
-        white-space: normal;
-        overflow-wrap: anywhere;
         text-align: center;
-      }
-      .item-notes {
-        color: #5f6d64;
-        font-size: 11px;
+        overflow-wrap: anywhere;
       }
       .bullet-list {
         margin: 0;
-        padding-left: 16px;
       }
-      .bullet-list li {
-        margin-bottom: 5px;
+      .bullet-line {
+        position: relative;
+        margin: 0 0 5px;
+        padding-left: 15px;
+        color: #26352d;
       }
-      .bullet-list li:last-child {
+      .bullet-line:last-child {
         margin-bottom: 0;
       }
-      .compact-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
+      .bullet-line::before {
+        content: "";
+        position: absolute;
+        top: 0.58em;
+        left: 0;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #244f41;
+        box-shadow: 0 0 0 3px rgba(36, 79, 65, 0.10);
       }
-      .compact-list li {
+      .mini-stack {
+        display: grid;
+        gap: 10px;
+      }
+      .mini-entry {
+        padding: 10px 11px 10px;
+        border: 1px solid #eadfcd;
+        border-radius: 14px;
+        background: #fcfaf6;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .mini-entry h3 {
+        margin: 0;
+        color: #163126;
+        font-size: 13px;
+        line-height: 1.25;
+      }
+      .mini-meta {
         display: flex;
         justify-content: space-between;
         gap: 10px;
-        padding: 8px 0;
-        border-bottom: 1px solid #e5ece1;
+        margin-top: 6px;
+        color: #5b675e;
+        font-size: 10.5px;
       }
-      .compact-list li:first-child {
-        padding-top: 0;
-      }
-      .compact-list li:last-child {
-        border-bottom: none;
-        padding-bottom: 0;
-      }
-      .compact-list strong {
-        color: #294130;
+      .mini-meta strong {
+        color: #7b5a30;
         font-size: 10px;
-        text-transform: uppercase;
         letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
-      .muted {
-        color: #7b8a80;
+      .entry-note {
+        margin: 8px 0 0;
+        color: #606960;
+        font-size: 10.5px;
+      }
+      .detail-list {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .detail-list li {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #ede3d5;
+      }
+      .detail-list li:last-child {
+        padding-bottom: 0;
+        border-bottom: none;
+      }
+      .detail-list span {
+        color: #26352d;
+      }
+      .detail-list strong {
+        color: #7b5a30;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        text-align: right;
       }
       @media print {
         html,
@@ -461,29 +541,9 @@ function renderResumeHtml({
   </head>
   <body>
     <article class="sheet">
-      <header class="hero">
-        <div class="hero-top">
-          <div>
-            <h1>${name}</h1>
-            <p class="hero-role">${roleLine}</p>
-          </div>
-        </div>
-        ${contactMarkup}
-      </header>
+      ${headerMarkup}
       <main class="content">
-        ${renderSection('Professional Summary', summaryMarkup)}
-        ${renderSection('Core Skills', skillsMarkup)}
-        <div class="two-column">
-          <div>
-            ${renderSection('Experience', experienceMarkup)}
-          </div>
-          <div>
-            <div class="rail-card">
-              ${renderSection('Education', educationMarkup, { compact: true })}
-              ${renderSection('Languages', languagesMarkup, { compact: true })}
-            </div>
-          </div>
-        </div>
+        ${contentMarkup}
       </main>
     </article>
   </body>

@@ -193,6 +193,12 @@
       color: #475569;
       font-size: 14px;
     }
+    .download-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
     .result-text hr {
       border: none;
       border-top: 1px solid #e2e8f0;
@@ -263,9 +269,12 @@
             </div>
             <hr />
             <div class="download-block">
-              <strong>Cover letter (TXT)</strong>
-              <p id="cover-letter-message">A separate cover_letter.txt will be generated for every upload.</p>
-              <a id="download-cover-letter" class="download-link secondary" href="#" download="cover_letter.txt" style="display:none;">Download cover_letter.txt</a>
+              <strong>Cover letter (TXT / PDF)</strong>
+              <p id="cover-letter-message">Separate TXT and PDF cover letter files will be generated for every upload.</p>
+              <div class="download-actions">
+                <a id="download-cover-letter" class="download-link secondary" href="#" download="cover_letter.txt" style="display:none;">Download cover_letter.txt</a>
+                <a id="download-cover-letter-pdf" class="download-link secondary" href="#" download="cover_letter.pdf" style="display:none;">Download cover_letter.pdf</a>
+              </div>
             </div>
           </div>
         </div>
@@ -321,11 +330,13 @@
     const skillsOutput = document.getElementById('skills-output');
     const downloadResumeLink = document.getElementById('download-resume');
     const downloadCoverLetterLink = document.getElementById('download-cover-letter');
+    const downloadCoverLetterPdfLink = document.getElementById('download-cover-letter-pdf');
     const pdfMessage = document.getElementById('pdf-message');
     const coverLetterMessage = document.getElementById('cover-letter-message');
     const downloadUrls = {
       resume: '',
-      coverLetter: '',
+      coverLetterTxt: '',
+      coverLetterPdf: '',
     };
 
     async function copyText(targetId) {
@@ -460,16 +471,26 @@
             successMessage: `${optimizedFileName} is ready.`,
           });
           updateDownloadLink({
-            kind: 'coverLetter',
+            kind: 'coverLetterTxt',
             base64: data.coverLetterFile,
             mimeType: 'text/plain',
             fileName: coverFileName,
             linkEl: downloadCoverLetterLink,
             messageEl: coverLetterMessage,
-            emptyMessage: 'No cover letter file returned.',
-            successMessage: `${coverFileName} is ready.`,
+            emptyMessage: 'No cover letter files returned.',
+            successMessage: 'Cover letter TXT and PDF files are ready.',
           });
-          uploadStatus.textContent = 'Upload processed! Download your PDF or copy the text above.';
+          updateDownloadLink({
+            kind: 'coverLetterPdf',
+            base64: data.coverLetterPdf,
+            mimeType: 'application/pdf',
+            fileName: data.coverLetterPdfFileName || 'cover_letter.pdf',
+            linkEl: downloadCoverLetterPdfLink,
+            messageEl: coverLetterMessage,
+            emptyMessage: 'No cover letter files returned.',
+            successMessage: 'Cover letter TXT and PDF files are ready.',
+          });
+          uploadStatus.textContent = 'Upload processed. Download the resume and cover letter files or copy the text above.';
           if (resumeInput) {
             resumeInput.value = '';
           }
@@ -488,14 +509,24 @@
             successMessage: 'No PDF returned.',
           });
           updateDownloadLink({
-            kind: 'coverLetter',
+            kind: 'coverLetterTxt',
             base64: '',
             mimeType: 'text/plain',
             fileName: 'cover_letter.txt',
             linkEl: downloadCoverLetterLink,
             messageEl: coverLetterMessage,
-            emptyMessage: 'No cover letter file returned.',
-            successMessage: 'No cover letter file returned.',
+            emptyMessage: 'No cover letter files returned.',
+            successMessage: 'No cover letter files returned.',
+          });
+          updateDownloadLink({
+            kind: 'coverLetterPdf',
+            base64: '',
+            mimeType: 'application/pdf',
+            fileName: 'cover_letter.pdf',
+            linkEl: downloadCoverLetterPdfLink,
+            messageEl: coverLetterMessage,
+            emptyMessage: 'No cover letter files returned.',
+            successMessage: 'No cover letter files returned.',
           });
         } finally {
           uploadBtn.disabled = false;

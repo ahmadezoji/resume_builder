@@ -3,7 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const formidable = require('formidable');
 const pdfParse = require('pdf-parse');
+const { renderCoverLetterHtml } = require('./templates/coverLetterTemplate');
 const { renderResumeHtml } = require('./templates/resumeTemplate');
+const { normalizeOptionalText, normalizeTextLines } = require('./utils/contentSanitizer');
 const { generatePdfFromHtml } = require('./utils/pdfGenerator');
 
 const PORT = process.env.PORT || 5500;
@@ -36,6 +38,91 @@ const contentTypes = {
   '.js': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
 };
+
+const HUMAN_WRITING_RULES = [
+  '- Write in formal, polished, human-sounding language.',
+  '- Avoid generic AI phrasing, exaggerated claims, buzzwords, and repetitive references to the target role.',
+  '- Keep wording specific, credible, and grounded in the source resume.',
+].join('\n');
+
+const EXPERIENCE_ALIGNMENT_RULES = [
+  '- Preserve every distinct work experience/company from the source resume. Do not drop, merge, or omit roles; only reorder them by relevance.',
+  '- Preserve company names, role titles, and date ranges when present.',
+  '- Keep each responsibility, achievement, and technology with the correct company. Never move bullets or accomplishments from one company to another.',
+  '- If a target job requirement is not credibly related to a specific company role, leave that company description close to the source and only optimize wording.',
+  '- Do not rewrite a role into a different discipline. Backend work must remain backend; mobile must remain mobile; frontend must remain frontend unless the source clearly shows both.',
+  '- You may tailor wording toward adjacent technologies or patterns only when the connection is credible and supported by the original experience or the candidate\'s skills.',
+  '- For adjacent technologies in the same domain, you may highlight transferable relevance without falsely claiming direct production use for that company.',
+  '- Example allowed: Django/Python backend experience reframed as relevant Python web backend experience for a Flask-oriented role.',
+  '- Example allowed: Flutter mobile development presented as strong cross-platform mobile experience relevant to React Native roles, especially when React Native also appears elsewhere in the candidate profile.',
+  '- Example not allowed: backend engineering rewritten as frontend engineering, or unsupported tools being presented as direct production experience.',
+  '- Do not claim direct use of a technology inside a specific company role unless the resume text or skills evidence supports that claim.',
+  '- Keep each experience substantial. Preserve the main responsibilities, tools, and outcomes instead of shrinking the entry into generic bullets.',
+].join('\n');
+
+function buildTailorSystemPrompt() {
+  return `You are a resume tailoring assistant.
+- Rewrite the candidate's "About me" to align with the job title and description while staying truthful.
+- Reorder the experience entries by relevance, but preserve every input experience entry.
+- Lightly edit experience text to highlight relevant overlap without inventing facts.
+${EXPERIENCE_ALIGNMENT_RULES}
+- Return the same number of experience entries as the input. Do not return fewer entries.
+- Write a concise, formal cover letter that sounds human and references the job title and key requirements naturally.
+${HUMAN_WRITING_RULES}
+Return a compact JSON object with an "aboutMe" string, an ordered "experiences" array of strings, and a "coverLetter" string. Do not include explanations.`;
+}
+
+function buildResumeUploadSystemPrompt() {
+  return `You are a resume analyst and writer. Analyze the provided resume text and align it with the target job. Respond ONLY with JSON matching:
+{
+  "personalInfo": {
+    "name": "string",
+    "title": "string",
+    "email": "string",
+    "phone": "string",
+    "location": "string",
+    "links": ["string"]
+  },
+  "skills": ["string"],
+  "languages": [
+    {
+      "name": "string",
+      "fluency": "string"
+    }
+  ],
+  "education": [
+    {
+      "institution": "string",
+      "credential": "string",
+      "years": "string",
+      "details": "string"
+    }
+  ],
+  "aboutMe": "string",
+  "experiences": [
+    {
+      "company": "string",
+      "role": "string",
+      "years": "string",
+      "summary": "string"
+    }
+  ],
+  "coverLetter": "string"
+}
+- Derive personal details, role title, education, and languages from the resume text when possible.
+- Extract every distinct work experience/company from the resume. Do not merge or omit roles even if some are less relevant to the target job.
+- Only include company, role, education dates, and experience dates when they are supported by the resume text.
+- If a year or any other field is missing, return an empty string or empty array instead of placeholders such as YYYY, None, N/A, Unknown, or "not specified".
+${EXPERIENCE_ALIGNMENT_RULES}
+- For each experience.summary, produce 4-6 bullet-style sentences separated by newline characters when the source supports it.
+- Preserve the main responsibility scope, important tools, and outcomes for each role. Refine and reorder details, but do not flatten the experience into generic target-role statements.
+- Use the candidate's extracted skills as supporting evidence when emphasizing truthful, adjacent technical overlap.
+- The skills list may add a small number of highly probable, job-relevant skills that are strongly implied by the resume and experience, even if they were omitted explicitly.
+- Only add inferred skills when the resume provides clear support. Example allowed: add BLoC for a Flutter-heavy profile when the target job explicitly asks for Flutter state management experience.
+- Do not add skills that are speculative, unrelated to the target role, or unsupported by the candidate's background.
+- Ensure the "aboutMe" and "coverLetter" are formal, natural, and specific to the target job without sounding machine-generated.
+${HUMAN_WRITING_RULES}`;
+}
 
 function toNameSlug(value = '') {
   if (!value) return 'candidate';
@@ -148,27 +235,161 @@ async function extractResumeText(fileSource) {
 
 function normalizeExperiences(rawExperiences) {
   if (!Array.isArray(rawExperiences)) return [];
-  return rawExperiences.map((item = {}) => {
-    const company = typeof item.company === 'string' ? item.company.trim() : '';
-    const role = typeof item.role === 'string' ? item.role.trim() : '';
-    const years = typeof item.years === 'string' ? item.years.trim() : '';
-    const summary = typeof item.summary === 'string'
-      ? item.summary.trim()
-      : typeof item.details === 'string'
-        ? item.details.trim()
-        : '';
-    return {
-      company: company || 'Company not specified',
-      role: role || 'Role not specified',
-      years: years || 'Dates not specified',
-      summary,
-    };
-  });
+  return rawExperiences
+    .map((item = {}) => {
+      const company = normalizeOptionalText(item.company);
+      const role = normalizeOptionalText(item.role);
+      const years = normalizeOptionalText(item.years);
+      const summary = normalizeTextLines(item.summary || item.details).join('\n');
+
+      if (!company && !role && !years && !summary) {
+        return null;
+      }
+
+      return {
+        company,
+        role,
+        years,
+        summary,
+      };
+    })
+    .filter(Boolean);
 }
 
 function formatExperienceForDisplay(entry) {
-  const header = `${entry.company} — ${entry.role} (${entry.years})`.replace(/\s+/g, ' ').trim();
-  return entry.summary ? `${header}\n${entry.summary}` : header;
+  const titleParts = [entry.company, entry.role].filter(Boolean);
+  const header = titleParts.length
+    ? `${titleParts.join(' — ')}${entry.years ? ` (${entry.years})` : ''}`
+    : entry.years;
+
+  if (header && entry.summary) {
+    return `${header}\n${entry.summary}`;
+  }
+
+  return header || entry.summary || '';
+}
+
+function normalizeStringArray(values) {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set();
+
+  return values
+    .map(normalizeOptionalText)
+    .filter(Boolean)
+    .filter((value) => {
+      const key = value.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function containsPattern(text, patterns = []) {
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function inferRelatedSkills(jobDescription, existingSkills = [], experiences = []) {
+  const normalizedSkills = normalizeStringArray(existingSkills);
+  const skillsText = normalizedSkills.join(' ');
+  const experienceText = Array.isArray(experiences)
+    ? experiences.map((entry) => [entry.role, entry.company, entry.summary].filter(Boolean).join(' ')).join(' ')
+    : '';
+  const supportText = `${skillsText} ${experienceText}`.toLowerCase();
+  const jobText = String(jobDescription || '').toLowerCase();
+
+  const inferredRules = [
+    {
+      skill: 'BLoC',
+      jobPatterns: [/\bbloc\b/i, /\bflutter\b/i, /\bstate management\b/i],
+      supportPatterns: [/\bflutter\b/i, /\bdart\b/i, /\bstate management\b/i],
+      shouldAdd: () => !/\bbloc\b/i.test(skillsText),
+    },
+    {
+      skill: 'State Management',
+      jobPatterns: [/\bstate management\b/i],
+      supportPatterns: [/\bflutter\b/i, /\breact native\b/i, /\bmobile\b/i, /\bbloc\b/i],
+      shouldAdd: () => !/\bstate management\b/i.test(skillsText),
+    },
+    {
+      skill: 'REST APIs',
+      jobPatterns: [/\brest\b/i, /\bapi\b/i],
+      supportPatterns: [/\bflask\b/i, /\bdjango\b/i, /\bspring boot\b/i, /\bapi\b/i],
+      shouldAdd: () => !/\brest api\b/i.test(skillsText) && !/\brest apis\b/i.test(skillsText),
+    },
+    {
+      skill: 'CI/CD',
+      jobPatterns: [/\bci\/cd\b/i, /\bcontinuous integration\b/i, /\bcontinuous delivery\b/i],
+      supportPatterns: [/\bcircleci\b/i, /\bcodemagic\b/i, /\bdocker\b/i, /\bdeployment\b/i],
+      shouldAdd: () => !/\bci\/cd\b/i.test(skillsText),
+    },
+  ];
+
+  const inferredSkills = inferredRules
+    .filter((rule) => containsPattern(jobText, rule.jobPatterns))
+    .filter((rule) => containsPattern(supportText, rule.supportPatterns))
+    .filter((rule) => rule.shouldAdd())
+    .map((rule) => rule.skill);
+
+  return normalizeStringArray([...normalizedSkills, ...inferredSkills]);
+}
+
+function normalizePersonalInfo(personalInfo = {}) {
+  return {
+    name: normalizeOptionalText(personalInfo.name),
+    title: normalizeOptionalText(personalInfo.title),
+    email: normalizeOptionalText(personalInfo.email),
+    phone: normalizeOptionalText(personalInfo.phone),
+    location: normalizeOptionalText(personalInfo.location),
+    links: normalizeStringArray(personalInfo.links),
+  };
+}
+
+function normalizeEducation(rawEducation) {
+  if (!Array.isArray(rawEducation)) return [];
+
+  return rawEducation
+    .map((entry = {}) => {
+      const institution = normalizeOptionalText(entry.institution);
+      const credential = normalizeOptionalText(entry.credential);
+      const years = normalizeOptionalText(entry.years);
+      const details = normalizeOptionalText(entry.details);
+
+      if (!institution && !credential && !years && !details) {
+        return null;
+      }
+
+      return {
+        institution,
+        credential,
+        years,
+        details,
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeLanguages(rawLanguages) {
+  if (!Array.isArray(rawLanguages)) return [];
+
+  return rawLanguages
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return normalizeOptionalText(entry);
+      }
+
+      const name = normalizeOptionalText(entry?.name);
+      const fluency = normalizeOptionalText(entry?.fluency || entry?.proficiency);
+
+      if (!name && !fluency) {
+        return null;
+      }
+
+      return {
+        name,
+        fluency,
+      };
+    })
+    .filter(Boolean);
 }
 
 function serveStatic(req, res) {
@@ -216,14 +437,20 @@ async function handleTailorRequest(req, res) {
       return;
     }
 
-    const systemPrompt = `You are a resume tailoring assistant. Given a target job and a resume, you:\n- Rewrite the candidate's "About me" to align with the job title and description while staying truthful.\n- Reorder experiences so that the most relevant items appear first.\n- Lightly edit experience text to highlight skills the job requires without inventing facts.\n- Ensure every experience snippet mentions the employer/company and the date range (e.g., 2019-2023 or 2021-Present).\n- Write a concise, friendly cover letter that sounds human, references the job title, and mentions specific requirements or concepts from the description the candidate has addressed.\nReturn a compact JSON object with an "aboutMe" string, an ordered "experiences" array of strings, and a "coverLetter" string. Do not include explanations.`;
+    const inputExperiences = String(experiences)
+      .split(/\n{2,}/)
+      .map(normalizeOptionalText)
+      .filter(Boolean);
+
+    const systemPrompt = buildTailorSystemPrompt();
 
     const userPrompt = {
       jobTitle,
       jobDescription,
       currentAboutMe: aboutMe,
-      experiences,
-      guidance: 'Keep details honest but emphasize overlap with the target role. You may adjust phrasing, reorder entries, trim irrelevant details, and create a personable cover letter that nods to the company needs.'
+      experiences: inputExperiences,
+      inputExperienceCount: inputExperiences.length,
+      guidance: 'Keep every experience entry. Reorder by relevance if needed, but do not remove companies or collapse multiple roles into fewer entries. Keep each description attached to the correct company. Tailor only credible technical overlap, and when frameworks are adjacent, present them as transferable relevance rather than unsupported direct production claims. Keep the tone formal and human.'
     };
 
     const messageContent = await callOpenAi([
@@ -231,11 +458,16 @@ async function handleTailorRequest(req, res) {
       { role: 'user', content: JSON.stringify(userPrompt) },
     ]);
     const parsed = parseJson(messageContent);
+    const parsedExperiences = Array.isArray(parsed.experiences)
+      ? parsed.experiences.map(normalizeOptionalText).filter(Boolean)
+      : [];
 
     sendJson(res, 200, {
-      aboutMe: parsed.aboutMe || aboutMe,
-      experiences: Array.isArray(parsed.experiences) ? parsed.experiences : experiences.split(/\n{2,}/).map((item) => item.trim()).filter(Boolean),
-      coverLetter: parsed.coverLetter || ''
+      aboutMe: normalizeOptionalText(parsed.aboutMe) || normalizeOptionalText(aboutMe),
+      experiences: parsedExperiences.length === inputExperiences.length
+        ? parsedExperiences
+        : inputExperiences,
+      coverLetter: normalizeOptionalText(parsed.coverLetter)
     });
   } catch (error) {
     console.error('Tailor request failed', error);
@@ -280,52 +512,13 @@ async function handleResumeUpload(req, res) {
     const originalPdfBuffer = await fs.promises.readFile(tempFilePath);
     const resumeText = await extractResumeText(originalPdfBuffer);
 
-    const systemPrompt = `You are a resume analyst and writer. Analyze the provided resume text and align it with the target job. Respond ONLY with JSON matching:
-{
-  "personalInfo": {
-    "name": "string",
-    "email": "string",
-    "phone": "string",
-    "location": "string",
-    "links": ["string"]
-  },
-  "skills": ["string"],
-  "languages": [
-    {
-      "name": "string",
-      "fluency": "string"
-    }
-  ],
-  "education": [
-    {
-      "institution": "string",
-      "credential": "string",
-      "years": "YYYY-YYYY or YYYY-Present",
-      "details": "string"
-    }
-  ],
-  "aboutMe": "string",
-  "experiences": [
-    {
-      "company": "string",
-      "role": "string",
-      "years": "YYYY-YYYY or YYYY-Present",
-      "summary": "string"
-    }
-  ],
-  "coverLetter": "string"
-}
-- Derive personal details, education, and languages from the resume text when possible.
-- Always include company and explicit year ranges for every experience entry. Prefer YYYY-YYYY or YYYY-Present formats.
-- For each experience.summary, produce 3-5 bullet-style sentences separated by newline characters. The first bullet should explicitly connect the role to the target job requirements, while the remaining bullets must be refined versions of the original resume details (do not delete facts—rewrite for clarity and impact). If the resume offers more than three relevant statements, keep them all by merging overlapping ideas rather than removing content.
-- Keep experience summaries concise and impact-focused, highlighting overlap with the job description.
-- Ensure the cover letter references the job title and key requirements from the supplied description.`;
+    const systemPrompt = buildResumeUploadSystemPrompt();
 
     const userPrompt = {
       jobTitle,
       jobDescription,
       resumeText,
-      guidance: 'Use only facts present in the resume. You may polish wording, reorder experience items, and infer skills explicitly stated or implied by the resume.'
+      guidance: 'Use only facts present in the resume. Preserve every company and role, keep each responsibility under the correct company, tailor only credible technical overlap, use the extracted skill set as evidence, add only strongly supported missing skills that the candidate likely forgot to list, and keep the result formal, natural, and not overly AI-sounding.'
     };
 
     const messageContent = await callOpenAi([
@@ -335,19 +528,21 @@ async function handleResumeUpload(req, res) {
 
     const parsed = parseJson(messageContent);
     const normalizedExperiences = normalizeExperiences(parsed.experiences);
-    const experiencesForDisplay = normalizedExperiences.map(formatExperienceForDisplay);
+    const experiencesForDisplay = normalizedExperiences.map(formatExperienceForDisplay).filter(Boolean);
     const tailored = {
-      aboutMe: parsed.aboutMe || '',
+      aboutMe: normalizeOptionalText(parsed.aboutMe),
       experiences: normalizedExperiences,
-      coverLetter: parsed.coverLetter || '',
-      personalInfo: parsed.personalInfo || {},
-      skills: Array.isArray(parsed.skills) ? parsed.skills : [],
-      education: Array.isArray(parsed.education) ? parsed.education : [],
-      languages: Array.isArray(parsed.languages) ? parsed.languages : [],
+      coverLetter: normalizeOptionalText(parsed.coverLetter),
+      personalInfo: normalizePersonalInfo(parsed.personalInfo),
+      skills: inferRelatedSkills(jobDescription, normalizeStringArray(parsed.skills), normalizedExperiences),
+      education: normalizeEducation(parsed.education),
+      languages: normalizeLanguages(parsed.languages),
     };
 
     const resumeFileName = 'saam_ezoji.pdf';
+    const coverLetterText = tailored.coverLetter || 'Cover letter content was not generated.';
     const coverLetterFileName = buildExportFileName('cover', tailored.personalInfo?.name, 'txt');
+    const coverLetterPdfFileName = buildExportFileName('cover', tailored.personalInfo?.name, 'pdf');
 
     const resumeHtml = renderResumeHtml({
       personalInfo: tailored.personalInfo,
@@ -358,8 +553,14 @@ async function handleResumeUpload(req, res) {
       languages: tailored.languages,
     });
     const pdfBuffer = await generatePdfFromHtml(resumeHtml);
+    const coverLetterHtml = renderCoverLetterHtml({
+      personalInfo: tailored.personalInfo,
+      jobTitle,
+      coverLetter: coverLetterText,
+    });
+    const coverLetterPdfBuffer = await generatePdfFromHtml(coverLetterHtml);
 
-    const coverLetterFile = Buffer.from(tailored.coverLetter || 'No cover letter generated.', 'utf8').toString('base64');
+    const coverLetterFile = Buffer.from(coverLetterText, 'utf8').toString('base64');
 
     sendJson(res, 200, {
       aboutMe: tailored.aboutMe,
@@ -373,6 +574,8 @@ async function handleResumeUpload(req, res) {
       optimizedFileName: resumeFileName,
       coverLetterFile,
       coverLetterFileName,
+      coverLetterPdf: coverLetterPdfBuffer.toString('base64'),
+      coverLetterPdfFileName,
       experienceItems: normalizedExperiences,
     });
   } catch (error) {
