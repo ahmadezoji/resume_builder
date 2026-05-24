@@ -5,7 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "start:prod": "node server.js",
     "test": "echo \"No automated tests configured\""
+  },
+  "engines": {
+    "node": ">=18"
   },
   "keywords": [],
   "author": "",

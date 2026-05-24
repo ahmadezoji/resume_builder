@@ -5,7 +5,12 @@ let browserPromise;
 
 function resolveChromeExecutablePath() {
   const candidates = [
+    process.env.CHROME_PATH,
     process.env.PUPPETEER_EXECUTABLE_PATH,
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
     '/Applications/Chromium.app/Contents/MacOS/Chromium',
@@ -19,7 +24,7 @@ async function getBrowser() {
     const executablePath = resolveChromeExecutablePath();
     browserPromise = puppeteer.launch({
       headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
       ...(executablePath ? { executablePath } : {}),
     });
   }

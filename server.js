@@ -8,7 +8,6 @@ const { renderResumeHtml } = require('./templates/resumeTemplate');
 const { normalizeOptionalText, normalizeTextLines } = require('./utils/contentSanitizer');
 const { generatePdfFromHtml } = require('./utils/pdfGenerator');
 
-const PORT = process.env.PORT || 5500;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const ENV_PATH = path.join(__dirname, '.env');
 
@@ -26,6 +25,8 @@ if (fs.existsSync(ENV_PATH)) {
   });
 }
 
+const HOST = process.env.HOST || '0.0.0.0';
+const PORT = process.env.PORT || 5500;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 if (!OPENAI_API_KEY) {
@@ -147,6 +148,14 @@ function buildExportFileName(prefix, candidateName, extension) {
   return `${safePrefix}_${slug}_${stamp}.${safeExtension}`;
 }
 
+function buildFilePayload(buffer, fileName, mimeType) {
+  return {
+    fileName,
+    mimeType,
+    base64: buffer.toString('base64'),
+  };
+}
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(payload));
@@ -221,6 +230,52 @@ function getFirstField(fieldValue) {
 function getSingleFile(fileValue) {
   if (!fileValue) return null;
   return Array.isArray(fileValue) ? fileValue[0] : fileValue;
+}
+
+function isPdfUpload(file = {}) {
+  const mimeType = normalizeOptionalText(file.mimetype).toLowerCase();
+  const originalFilename = normalizeOptionalText(file.originalFilename || file.newFilename || '');
+  return mimeType === 'application/pdf'
+    || mimeType === 'application/octet-stream'
+    || path.extname(originalFilename).toLowerCase() === '.pdf';
+}
+
+async function parseResumeTailorPayload(req) {
+  const { fields, files } = await parseMultipartForm(req);
+  const jobTitle = normalizeOptionalText(getFirstField(fields.jobTitle));
+  const jobDescription = normalizeOptionalText(getFirstField(fields.jobDescription));
+  const resumeFile = getSingleFile(files.resume);
+
+  if (!jobTitle || !jobDescription) {
+    const error = new Error('jobTitle and jobDescription are required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!resumeFile) {
+    const error = new Error('Resume PDF is required under the "resume" field.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!isPdfUpload(resumeFile)) {
+    const error = new Error('Only PDF resumes are supported.');
+    error.statusCode = 415;
+    throw error;
+  }
+
+  const tempFilePath = resumeFile.filepath || resumeFile.path || '';
+  if (!tempFilePath) {
+    const error = new Error('Unable to access uploaded file.');
+    error.statusCode = 500;
+    throw error;
+  }
+
+  return {
+    jobTitle,
+    jobDescription,
+    tempFilePath,
+  };
 }
 
 async function extractResumeText(fileSource) {
@@ -392,6 +447,115 @@ function normalizeLanguages(rawLanguages) {
     .filter(Boolean);
 }
 
+async function buildTailoredResumePackage({ jobTitle, jobDescription, resumeSource }) {
+  const originalPdfBuffer = Buffer.isBuffer(resumeSource)
+    ? resumeSource
+    : await fs.promises.readFile(resumeSource);
+  const resumeText = await extractResumeText(originalPdfBuffer);
+
+  const systemPrompt = buildResumeUploadSystemPrompt();
+  const userPrompt = {
+    jobTitle,
+    jobDescription,
+    resumeText,
+    guidance: 'Use only facts present in the resume. Preserve every company and role, keep each responsibility under the correct company, tailor only credible technical overlap, use the extracted skill set as evidence, add only strongly supported missing skills that the candidate likely forgot to list, and keep the result formal, natural, and not overly AI-sounding.'
+  };
+
+  const messageContent = await callOpenAi([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: JSON.stringify(userPrompt) },
+  ]);
+
+  const parsed = parseJson(messageContent);
+  const normalizedExperiences = normalizeExperiences(parsed.experiences);
+  const experiencesForDisplay = normalizedExperiences.map(formatExperienceForDisplay).filter(Boolean);
+  const tailored = {
+    aboutMe: normalizeOptionalText(parsed.aboutMe),
+    experiences: normalizedExperiences,
+    coverLetter: normalizeOptionalText(parsed.coverLetter),
+    personalInfo: normalizePersonalInfo(parsed.personalInfo),
+    skills: inferRelatedSkills(jobDescription, normalizeStringArray(parsed.skills), normalizedExperiences),
+    education: normalizeEducation(parsed.education),
+    languages: normalizeLanguages(parsed.languages),
+  };
+
+  const resumeFileName = buildExportFileName('resume', tailored.personalInfo?.name, 'pdf');
+  const coverLetterText = tailored.coverLetter || 'Cover letter content was not generated.';
+  const coverLetterTextFileName = buildExportFileName('cover', tailored.personalInfo?.name, 'txt');
+  const coverLetterPdfFileName = buildExportFileName('cover', tailored.personalInfo?.name, 'pdf');
+
+  const resumeHtml = renderResumeHtml({
+    personalInfo: tailored.personalInfo,
+    aboutMe: tailored.aboutMe,
+    skills: tailored.skills,
+    experiences: tailored.experiences,
+    education: tailored.education,
+    languages: tailored.languages,
+  });
+  const resumePdfBuffer = await generatePdfFromHtml(resumeHtml);
+
+  const coverLetterHtml = renderCoverLetterHtml({
+    personalInfo: tailored.personalInfo,
+    jobTitle,
+    coverLetter: coverLetterText,
+  });
+  const coverLetterPdfBuffer = await generatePdfFromHtml(coverLetterHtml);
+
+  return {
+    jobTitle,
+    tailored,
+    experiencesForDisplay,
+    resumeFileName,
+    resumePdfBuffer,
+    coverLetterText,
+    coverLetterTextFileName,
+    coverLetterPdfFileName,
+    coverLetterPdfBuffer,
+  };
+}
+
+function buildLegacyUploadResponse(pkg) {
+  return {
+    aboutMe: pkg.tailored.aboutMe,
+    experiences: pkg.experiencesForDisplay,
+    coverLetter: pkg.tailored.coverLetter,
+    personalInfo: pkg.tailored.personalInfo,
+    skills: pkg.tailored.skills,
+    education: pkg.tailored.education,
+    languages: pkg.tailored.languages,
+    optimizedPdf: pkg.resumePdfBuffer.toString('base64'),
+    optimizedFileName: pkg.resumeFileName,
+    coverLetterFile: Buffer.from(pkg.coverLetterText, 'utf8').toString('base64'),
+    coverLetterFileName: pkg.coverLetterTextFileName,
+    coverLetterPdf: pkg.coverLetterPdfBuffer.toString('base64'),
+    coverLetterPdfFileName: pkg.coverLetterPdfFileName,
+    experienceItems: pkg.tailored.experiences,
+  };
+}
+
+function buildApiResumeResponse(pkg) {
+  return {
+    success: true,
+    jobTitle: pkg.jobTitle,
+    candidateName: pkg.tailored.personalInfo?.name || '',
+    tailored: {
+      aboutMe: pkg.tailored.aboutMe,
+      coverLetter: pkg.tailored.coverLetter,
+      personalInfo: pkg.tailored.personalInfo,
+      skills: pkg.tailored.skills,
+      education: pkg.tailored.education,
+      languages: pkg.tailored.languages,
+      experiences: pkg.tailored.experiences,
+      experienceDisplay: pkg.experiencesForDisplay,
+    },
+    files: {
+      resumePdf: buildFilePayload(pkg.resumePdfBuffer, pkg.resumeFileName, 'application/pdf'),
+      coverLetterPdf: buildFilePayload(pkg.coverLetterPdfBuffer, pkg.coverLetterPdfFileName, 'application/pdf'),
+      coverLetterTxt: buildFilePayload(Buffer.from(pkg.coverLetterText, 'utf8'), pkg.coverLetterTextFileName, 'text/plain'),
+    },
+  };
+}
+
 function serveStatic(req, res) {
   const safePath = path.normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^\/+/, '');
   const requestedPath = safePath || 'index.html';
@@ -483,101 +647,16 @@ async function handleTailorRequest(req, res) {
 async function handleResumeUpload(req, res) {
   let tempFilePath = '';
   try {
-    const { fields, files } = await parseMultipartForm(req);
-    const jobTitle = getFirstField(fields.jobTitle);
-    const jobDescription = getFirstField(fields.jobDescription);
-    const resumeFile = getSingleFile(files.resume);
+    const payload = await parseResumeTailorPayload(req);
+    tempFilePath = payload.tempFilePath;
 
-    if (!jobTitle || !jobDescription) {
-      sendJson(res, 400, { error: 'jobTitle and jobDescription are required.' });
-      return;
-    }
-
-    if (!resumeFile) {
-      sendJson(res, 400, { error: 'Resume PDF is required under the "resume" field.' });
-      return;
-    }
-
-    if (resumeFile.mimetype && resumeFile.mimetype !== 'application/pdf') {
-      sendJson(res, 415, { error: 'Only PDF resumes are supported.' });
-      return;
-    }
-
-    tempFilePath = resumeFile.filepath || resumeFile.path || '';
-    if (!tempFilePath) {
-      sendJson(res, 500, { error: 'Unable to access uploaded file.' });
-      return;
-    }
-
-    const originalPdfBuffer = await fs.promises.readFile(tempFilePath);
-    const resumeText = await extractResumeText(originalPdfBuffer);
-
-    const systemPrompt = buildResumeUploadSystemPrompt();
-
-    const userPrompt = {
-      jobTitle,
-      jobDescription,
-      resumeText,
-      guidance: 'Use only facts present in the resume. Preserve every company and role, keep each responsibility under the correct company, tailor only credible technical overlap, use the extracted skill set as evidence, add only strongly supported missing skills that the candidate likely forgot to list, and keep the result formal, natural, and not overly AI-sounding.'
-    };
-
-    const messageContent = await callOpenAi([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: JSON.stringify(userPrompt) },
-    ]);
-
-    const parsed = parseJson(messageContent);
-    const normalizedExperiences = normalizeExperiences(parsed.experiences);
-    const experiencesForDisplay = normalizedExperiences.map(formatExperienceForDisplay).filter(Boolean);
-    const tailored = {
-      aboutMe: normalizeOptionalText(parsed.aboutMe),
-      experiences: normalizedExperiences,
-      coverLetter: normalizeOptionalText(parsed.coverLetter),
-      personalInfo: normalizePersonalInfo(parsed.personalInfo),
-      skills: inferRelatedSkills(jobDescription, normalizeStringArray(parsed.skills), normalizedExperiences),
-      education: normalizeEducation(parsed.education),
-      languages: normalizeLanguages(parsed.languages),
-    };
-
-    const resumeFileName = 'saam_ezoji.pdf';
-    const coverLetterText = tailored.coverLetter || 'Cover letter content was not generated.';
-    const coverLetterFileName = buildExportFileName('cover', tailored.personalInfo?.name, 'txt');
-    const coverLetterPdfFileName = buildExportFileName('cover', tailored.personalInfo?.name, 'pdf');
-
-    const resumeHtml = renderResumeHtml({
-      personalInfo: tailored.personalInfo,
-      aboutMe: tailored.aboutMe,
-      skills: tailored.skills,
-      experiences: tailored.experiences,
-      education: tailored.education,
-      languages: tailored.languages,
+    const resumePackage = await buildTailoredResumePackage({
+      jobTitle: payload.jobTitle,
+      jobDescription: payload.jobDescription,
+      resumeSource: tempFilePath,
     });
-    const pdfBuffer = await generatePdfFromHtml(resumeHtml);
-    const coverLetterHtml = renderCoverLetterHtml({
-      personalInfo: tailored.personalInfo,
-      jobTitle,
-      coverLetter: coverLetterText,
-    });
-    const coverLetterPdfBuffer = await generatePdfFromHtml(coverLetterHtml);
 
-    const coverLetterFile = Buffer.from(coverLetterText, 'utf8').toString('base64');
-
-    sendJson(res, 200, {
-      aboutMe: tailored.aboutMe,
-      experiences: experiencesForDisplay,
-      coverLetter: tailored.coverLetter,
-      personalInfo: tailored.personalInfo,
-      skills: tailored.skills,
-      education: tailored.education,
-      languages: tailored.languages,
-      optimizedPdf: pdfBuffer.toString('base64'),
-      optimizedFileName: resumeFileName,
-      coverLetterFile,
-      coverLetterFileName,
-      coverLetterPdf: coverLetterPdfBuffer.toString('base64'),
-      coverLetterPdfFileName,
-      experienceItems: normalizedExperiences,
-    });
+    sendJson(res, 200, buildLegacyUploadResponse(resumePackage));
   } catch (error) {
     console.error('Resume upload failed', error);
     const status = error.statusCode || 500;
@@ -593,12 +672,55 @@ async function handleResumeUpload(req, res) {
   }
 }
 
+async function handleTailorResumeApi(req, res) {
+  let tempFilePath = '';
+  try {
+    const payload = await parseResumeTailorPayload(req);
+    tempFilePath = payload.tempFilePath;
+
+    const resumePackage = await buildTailoredResumePackage({
+      jobTitle: payload.jobTitle,
+      jobDescription: payload.jobDescription,
+      resumeSource: tempFilePath,
+    });
+
+    sendJson(res, 200, buildApiResumeResponse(resumePackage));
+  } catch (error) {
+    console.error('Tailor resume API failed', error);
+    const status = error.statusCode || 500;
+    const payload = { success: false, error: error.message || 'Unexpected server error.' };
+    if (error.details) {
+      payload.details = error.details;
+    }
+    sendJson(res, status, payload);
+  } finally {
+    if (tempFilePath) {
+      fs.promises.unlink(tempFilePath).catch(() => {});
+    }
+  }
+}
+
 const server = http.createServer((req, res) => {
-  if (req.method === 'POST' && req.url.startsWith('/api/upload-resume')) {
+  const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = requestUrl.pathname;
+
+  if (req.method === 'GET' && pathname === '/healthz') {
+    return sendJson(res, 200, {
+      status: 'ok',
+      service: 'resume-builder',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  if (req.method === 'POST' && pathname === '/api/v1/tailor-resume') {
+    return handleTailorResumeApi(req, res);
+  }
+
+  if (req.method === 'POST' && pathname === '/api/upload-resume') {
     return handleResumeUpload(req, res);
   }
 
-  if (req.method === 'POST' && req.url.startsWith('/api/tailor')) {
+  if (req.method === 'POST' && pathname === '/api/tailor') {
     return handleTailorRequest(req, res);
   }
 
@@ -610,6 +732,6 @@ const server = http.createServer((req, res) => {
   res.end('Method not allowed');
 });
 
-server.listen(PORT, () => {
-  console.log(`Resume builder running on http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Resume builder running on http://${HOST}:${PORT}`);
 });
