@@ -19,7 +19,7 @@ const toParagraphs = (text = '') => {
 const toBulletList = (text = '') => {
   const lines = normalizeTextLines(text);
   if (!lines.length) return '';
-  return `<div class="bullet-list">${lines.map((line) => `<p class="bullet-line">${escapeHtml(line)}</p>`).join('')}</div>`;
+  return `<ul class="exp-bullets">${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`;
 };
 
 const renderContactRow = ({ email, phone, location, links = [] } = {}) => {
@@ -30,17 +30,17 @@ const renderContactRow = ({ email, phone, location, links = [] } = {}) => {
 
   if (safeEmailValue) {
     const safeEmail = escapeHtml(safeEmailValue);
-    items.push(`<a class="contact-chip" href="mailto:${safeEmail}">${safeEmail}</a>`);
+    items.push(`<a href="mailto:${safeEmail}">${safeEmail}</a>`);
   }
 
   if (safePhoneValue) {
     const safePhone = escapeHtml(safePhoneValue);
     const phoneHref = escapeHtml(`tel:${String(safePhoneValue).replace(/[^+\d]/g, '') || safePhoneValue}`);
-    items.push(`<a class="contact-chip" href="${phoneHref}">${safePhone}</a>`);
+    items.push(`<a href="${phoneHref}">${safePhone}</a>`);
   }
 
   if (safeLocationValue) {
-    items.push(`<span class="contact-chip">${escapeHtml(safeLocationValue)}</span>`);
+    items.push(`<span>${escapeHtml(safeLocationValue)}</span>`);
   }
 
   const normalizedLinks = Array.isArray(links)
@@ -49,14 +49,13 @@ const renderContactRow = ({ email, phone, location, links = [] } = {}) => {
 
   normalizedLinks.slice(0, 2).forEach((link) => {
     const href = /^https?:\/\//i.test(link) ? link : `https://${link}`;
-    items.push(`<a class="contact-chip" href="${escapeHtml(href)}">${escapeHtml(link)}</a>`);
+    items.push(`<a href="${escapeHtml(href)}">${escapeHtml(link)}</a>`);
   });
 
-  if (!items.length) {
-    return '';
-  }
+  if (!items.length) return '';
 
-  return `<div class="contact-list">${items.join('')}</div>`;
+  const sep = '<span class="contact-sep">·</span>';
+  return `<div class="contact-line">${items.join(sep)}</div>`;
 };
 
 const renderSkillChips = (skills = []) => {
@@ -64,49 +63,36 @@ const renderSkillChips = (skills = []) => {
     ? skills.map(normalizeOptionalText).filter(Boolean)
     : [];
 
-  if (!validSkills.length) {
-    return '';
-  }
+  if (!validSkills.length) return '';
 
-  return `<div class="skill-cloud">${validSkills.map((skill) => `<span class="skill-pill">${escapeHtml(skill)}</span>`).join('')}</div>`;
+  return `<div class="skill-grid">${validSkills.map((skill) => `<span class="skill-tag">${escapeHtml(skill)}</span>`).join('')}</div>`;
 };
 
 const renderLanguages = (languages = []) => {
-  if (!Array.isArray(languages) || !languages.length) {
-    return '';
-  }
+  if (!Array.isArray(languages) || !languages.length) return '';
 
-  const rows = languages
+  const items = languages
     .map((entry) => {
       if (typeof entry === 'string') {
         const language = normalizeOptionalText(entry);
-        return language ? `<li><span>${escapeHtml(language)}</span></li>` : '';
+        return language ? `<span class="lang-item">${escapeHtml(language)}</span>` : '';
       }
 
       const name = normalizeOptionalText(entry.name);
       const fluency = normalizeOptionalText(entry.fluency || entry.proficiency);
       if (!name && !fluency) return '';
 
-      return `
-        <li>
-          ${name ? `<span>${escapeHtml(name)}</span>` : ''}
-          ${fluency ? `<strong>${escapeHtml(fluency)}</strong>` : ''}
-        </li>
-      `;
+      return `<span class="lang-item">${name ? escapeHtml(name) : ''}${fluency ? `<span class="lang-level">${escapeHtml(fluency)}</span>` : ''}</span>`;
     })
     .filter(Boolean);
 
-  if (!rows.length) {
-    return '';
-  }
+  if (!items.length) return '';
 
-  return `<ul class="detail-list">${rows.join('')}</ul>`;
+  return `<div class="lang-grid">${items.join('')}</div>`;
 };
 
 const renderEducation = (education = []) => {
-  if (!Array.isArray(education) || !education.length) {
-    return '';
-  }
+  if (!Array.isArray(education) || !education.length) return '';
 
   const cards = education
     .map((entry) => {
@@ -115,84 +101,66 @@ const renderEducation = (education = []) => {
       const years = normalizeOptionalText(entry.years);
       const details = normalizeOptionalText(entry.details);
 
-      if (!institution && !credential && !years && !details) {
-        return '';
-      }
+      if (!institution && !credential && !years && !details) return '';
 
       return `
-        <article class="mini-entry">
-          ${institution ? `<h3>${escapeHtml(institution)}</h3>` : ''}
-          ${credential || years ? `
-            <div class="mini-meta">
-              ${credential ? `<span>${escapeHtml(credential)}</span>` : ''}
-              ${years ? `<strong>${escapeHtml(years)}</strong>` : ''}
-            </div>
-          ` : ''}
-          ${details ? `<p class="entry-note">${escapeHtml(details)}</p>` : ''}
+        <article class="edu-entry">
+          <div class="edu-head">
+            ${institution ? `<h3 class="edu-institution">${escapeHtml(institution)}</h3>` : '<div></div>'}
+            ${years ? `<span class="edu-years">${escapeHtml(years)}</span>` : ''}
+          </div>
+          ${credential ? `<p class="edu-credential">${escapeHtml(credential)}</p>` : ''}
+          ${details ? `<p class="edu-note">${escapeHtml(details)}</p>` : ''}
         </article>
       `;
     })
     .filter(Boolean);
 
-  if (!cards.length) {
-    return '';
-  }
+  if (!cards.length) return '';
 
-  return `<div class="mini-stack">${cards.join('')}</div>`;
+  return `<div class="edu-stack">${cards.join('')}</div>`;
 };
 
 const renderExperience = (experiences = []) => {
-  if (!Array.isArray(experiences) || !experiences.length) {
-    return '';
-  }
+  if (!Array.isArray(experiences) || !experiences.length) return '';
 
   const cards = experiences
     .map((entry) => {
       const company = normalizeOptionalText(entry.company);
       const role = normalizeOptionalText(entry.role);
       const years = normalizeOptionalText(entry.years);
-      const summary = toBulletList(entry.summary || '');
+      const bullets = toBulletList(entry.summary || '');
 
-      if (!company && !role && !years && !summary) {
-        return '';
-      }
+      if (!company && !role && !years && !bullets) return '';
 
       return `
-        <article class="experience-card">
-          ${role || company || years ? `
-            <div class="experience-head">
-              ${role || company ? `
-                <div class="experience-title-group">
-                  ${role ? `<h3>${escapeHtml(role)}</h3>` : ''}
-                  ${company ? `<p class="experience-company">${escapeHtml(company)}</p>` : ''}
-                </div>
-              ` : '<div></div>'}
-              ${years ? `<span class="item-years">${escapeHtml(years)}</span>` : ''}
-            </div>
-          ` : ''}
-          ${summary}
+        <article class="exp-entry">
+          <div class="exp-head">
+            ${role || company ? `
+              <div class="exp-title-group">
+                ${role ? `<h3 class="exp-title">${escapeHtml(role)}</h3>` : ''}
+                ${company ? `<p class="exp-company">${escapeHtml(company)}</p>` : ''}
+              </div>
+            ` : '<div></div>'}
+            ${years ? `<span class="exp-years">${escapeHtml(years)}</span>` : ''}
+          </div>
+          ${bullets}
         </article>
       `;
     })
     .filter(Boolean);
 
-  if (!cards.length) {
-    return '';
-  }
+  if (!cards.length) return '';
 
-  return `<div class="experience-stack">${cards.join('')}</div>`;
+  return `<div class="exp-stack">${cards.join('')}</div>`;
 };
 
-const renderSection = (label, body, options = {}) => {
-  if (!body) {
-    return '';
-  }
-
-  const tone = options.tone || 'main';
+const renderSection = (label, body) => {
+  if (!body) return '';
 
   return `
-    <section class="section section-${tone}">
-      <div class="section-label">${escapeHtml(label)}</div>
+    <section class="resume-section">
+      <div class="section-heading">${escapeHtml(label)}</div>
       <div class="section-body">
         ${body}
       </div>
@@ -210,31 +178,22 @@ function renderResumeHtml({
 } = {}) {
   const name = normalizeOptionalText(personalInfo.name);
   const roleLine = normalizeOptionalText(personalInfo.title) || normalizeOptionalText(experiences[0]?.role);
-  const summarySection = renderSection('Professional Summary', toParagraphs(aboutMe), { tone: 'main' });
   const contactMarkup = renderContactRow(personalInfo);
-  const skillsSection = renderSection('Technical Skills', renderSkillChips(skills), { tone: 'aside' });
-  const experienceSection = renderSection('Professional Experience', renderExperience(experiences), { tone: 'main' });
-  const educationSection = renderSection('Education', renderEducation(education), { tone: 'aside' });
-  const languagesSection = renderSection('Languages', renderLanguages(languages), { tone: 'aside' });
-  const heroIdentity = [
-    name ? `<h1>${escapeHtml(name)}</h1>` : '',
-    roleLine ? `<p class="hero-role">${escapeHtml(roleLine)}</p>` : '',
-    contactMarkup,
-  ].filter(Boolean).join('');
-  const headerMarkup = heroIdentity
-    ? `
-      <header class="hero">
-        <div class="hero-identity">${heroIdentity}</div>
-      </header>
-    `
-    : '';
+
+  const headerMarkup = (name || roleLine || contactMarkup) ? `
+    <header class="page-header">
+      ${name ? `<h1>${escapeHtml(name)}</h1>` : ''}
+      ${roleLine ? `<p class="hero-role">${escapeHtml(roleLine)}</p>` : ''}
+      ${contactMarkup}
+    </header>
+  ` : '';
 
   const contentMarkup = [
-    summarySection,
-    skillsSection,
-    experienceSection,
-    educationSection,
-    languagesSection,
+    renderSection('Professional Summary', toParagraphs(aboutMe)),
+    renderSection('Technical Skills', renderSkillChips(skills)),
+    renderSection('Professional Experience', renderExperience(experiences)),
+    renderSection('Education', renderEducation(education)),
+    renderSection('Languages', renderLanguages(languages)),
   ].filter(Boolean).join('');
 
   const titleText = escapeHtml(name || roleLine || 'Resume');
@@ -247,305 +206,237 @@ function renderResumeHtml({
     <style>
       @page {
         size: A4;
-        margin: 9mm;
+        margin: 16mm 20mm;
       }
       * {
         box-sizing: border-box;
       }
-      html {
-        background: #f1ede7;
+      html, body {
+        background: #ffffff;
+        margin: 0;
+        padding: 0;
       }
       body {
-        margin: 0;
-        background: #f1ede7;
-        color: #1f2937;
-        font-family: "Aptos", "Segoe UI", sans-serif;
-        font-size: 12px;
+        font-family: "Calibri", "Gill Sans MT", "Arial", sans-serif;
+        font-size: 11px;
         line-height: 1.5;
+        color: #1a1a1a;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
-      .sheet {
-        width: 100%;
-        overflow: hidden;
-        border: 1px solid #ddd5ca;
-        border-radius: 22px;
-        background: #fffdfa;
-        box-shadow: 0 14px 32px rgba(24, 35, 29, 0.08);
+
+      /* ── Header ── */
+      .page-header {
+        text-align: center;
+        padding-bottom: 11px;
+        margin-bottom: 15px;
+        border-bottom: 2px solid #1c3a5e;
       }
-      .hero {
-        padding: 24px 28px 18px;
-        background: linear-gradient(135deg, #143126 0%, #1e4438 62%, #7a5b35 100%);
-        color: #fbf7f1;
-      }
-      .hero h1 {
+      .page-header h1 {
         margin: 0;
-        color: #ffffff;
         font-family: "Georgia", "Times New Roman", serif;
-        font-size: 31px;
-        line-height: 0.98;
-        letter-spacing: 0.03em;
+        font-size: 30px;
+        font-weight: 700;
+        color: #111111;
+        letter-spacing: 0.04em;
+        line-height: 1.1;
       }
       .hero-role {
-        margin: 8px 0 0;
-        color: rgba(251, 247, 241, 0.88);
-        font-size: 11.5px;
-        font-weight: 600;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-      }
-      .contact-list {
-        margin-top: 12px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 7px;
-      }
-      .contact-chip {
-        display: inline-flex;
-        align-items: center;
-        min-height: 26px;
-        padding: 5px 10px;
-        border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        background: rgba(255, 255, 255, 0.12);
-        color: inherit;
-        text-decoration: none;
-        font-size: 10.5px;
-      }
-      .content {
-        padding: 16px 20px 20px;
-      }
-      .section {
-        margin-bottom: 12px;
-      }
-      .section:last-child {
-        margin-bottom: 0;
-      }
-      .section-main {
-        break-inside: auto;
-        page-break-inside: auto;
-      }
-      .section-aside {
-        break-inside: avoid;
-        page-break-inside: avoid;
-      }
-      .section-label {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 8px;
-        color: #173328;
+        margin: 6px 0 0;
         font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.2em;
-        text-transform: uppercase;
-      }
-      .section-main .section-label::before {
-        content: "";
-        width: 38px;
-        height: 2px;
-        border-radius: 999px;
-        background: linear-gradient(90deg, #1e4c3d, #ab8452);
-      }
-      .section-aside {
-        padding: 12px 13px 13px;
-        border: 1px solid #e8dece;
-        border-radius: 16px;
-        background: #fffdfa;
-      }
-      .section-aside .section-label {
-        margin-bottom: 8px;
-      }
-      .section-aside .section-label::before {
-        content: "";
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #1f4b3d, #ab8452);
-      }
-      .skill-cloud {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 7px;
-      }
-      .skill-pill {
-        display: inline-flex;
-        align-items: center;
-        padding: 6px 9px;
-        border-radius: 10px;
-        border: 1px solid #ddd1bf;
-        background: #f2ece2;
-        color: #1f3e33;
-        font-size: 10.5px;
         font-weight: 600;
-        line-height: 1.25;
-      }
-      .experience-stack {
-        display: grid;
-        gap: 10px;
-      }
-      .experience-card {
-        padding: 12px 14px 12px;
-        border: 1px solid #e7dccb;
-        border-left: 4px solid #1e4c3d;
-        border-radius: 16px;
-        background: #ffffff;
-        break-inside: avoid;
-        page-break-inside: avoid;
-      }
-      .experience-head {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        align-items: flex-start;
-        flex-wrap: wrap;
-        margin-bottom: 6px;
-      }
-      .experience-title-group {
-        min-width: 0;
-      }
-      .experience-title-group h3 {
-        margin: 0;
-        color: #132a22;
-        font-size: 15px;
-        line-height: 1.18;
-      }
-      .experience-company {
-        margin: 3px 0 0;
-        color: #687368;
-        font-size: 10.5px;
-        font-weight: 700;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.24em;
         text-transform: uppercase;
+        color: #1c3a5e;
       }
-      .item-years {
-        flex-shrink: 0;
-        display: inline-flex;
-        align-items: center;
+      .contact-line {
+        margin-top: 9px;
+        display: flex;
         justify-content: center;
-        min-height: 24px;
-        max-width: 100%;
-        padding: 4px 9px;
-        border-radius: 999px;
-        background: #efe5d7;
-        color: #6a4a26;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0;
         font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        text-align: center;
-        overflow-wrap: anywhere;
+        color: #333333;
       }
-      .bullet-list {
-        margin: 0;
+      .contact-line a {
+        color: #1c3a5e;
+        text-decoration: none;
       }
-      .bullet-line {
-        position: relative;
-        margin: 0 0 5px;
-        padding-left: 15px;
-        color: #26352d;
+      .contact-sep {
+        margin: 0 9px;
+        color: #bbb;
       }
-      .bullet-line:last-child {
+
+      /* ── Sections ── */
+      .resume-section {
+        margin-bottom: 14px;
+      }
+      .resume-section:last-child {
         margin-bottom: 0;
       }
-      .bullet-line::before {
-        content: "";
-        position: absolute;
-        top: 0.58em;
-        left: 0;
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: #244f41;
-        box-shadow: 0 0 0 3px rgba(36, 79, 65, 0.10);
+      .section-heading {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: #1c3a5e;
+        border-bottom: 1.5px solid #1c3a5e;
+        padding-bottom: 3px;
+        margin-bottom: 10px;
       }
-      .mini-stack {
+
+      /* ── Summary ── */
+      .section-body p {
+        margin: 0 0 5px;
+        font-size: 10.5px;
+        color: #2a2a2a;
+        line-height: 1.5;
+      }
+      .section-body p:last-child {
+        margin-bottom: 0;
+      }
+
+      /* ── Skills ── */
+      .skill-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .skill-tag {
+        display: inline-block;
+        padding: 3px 9px;
+        border: 1px solid #c5c5c5;
+        border-radius: 3px;
+        background: #f6f6f6;
+        font-size: 10px;
+        font-weight: 500;
+        color: #2a2a2a;
+        letter-spacing: 0.01em;
+      }
+
+      /* ── Experience ── */
+      .exp-stack {
         display: grid;
-        gap: 10px;
+        gap: 13px;
       }
-      .mini-entry {
-        padding: 10px 11px 10px;
-        border: 1px solid #eadfcd;
-        border-radius: 14px;
-        background: #fcfaf6;
+      .exp-entry {
         break-inside: avoid;
         page-break-inside: avoid;
       }
-      .mini-entry h3 {
-        margin: 0;
-        color: #163126;
-        font-size: 13px;
-        line-height: 1.25;
-      }
-      .mini-meta {
+      .exp-head {
         display: flex;
         justify-content: space-between;
-        gap: 10px;
-        margin-top: 6px;
-        color: #5b675e;
-        font-size: 10.5px;
-      }
-      .mini-meta strong {
-        color: #7b5a30;
-        font-size: 10px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-      }
-      .entry-note {
-        margin: 8px 0 0;
-        color: #606960;
-        font-size: 10.5px;
-      }
-      .detail-list {
-        display: grid;
-        gap: 8px;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .detail-list li {
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
         align-items: flex-start;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #ede3d5;
+        gap: 10px;
       }
-      .detail-list li:last-child {
-        padding-bottom: 0;
-        border-bottom: none;
-      }
-      .detail-list span {
-        color: #26352d;
-      }
-      .detail-list strong {
-        color: #7b5a30;
-        font-size: 10px;
+      .exp-title {
+        margin: 0;
+        font-size: 12px;
         font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        text-align: right;
+        color: #111111;
+        line-height: 1.2;
       }
+      .exp-company {
+        margin: 2px 0 5px;
+        font-size: 10.5px;
+        color: #555555;
+        font-style: italic;
+      }
+      .exp-years {
+        flex-shrink: 0;
+        font-size: 10px;
+        font-weight: 600;
+        color: #555555;
+        white-space: nowrap;
+        padding-top: 2px;
+        letter-spacing: 0.03em;
+      }
+      .exp-bullets {
+        margin: 0;
+        padding-left: 16px;
+      }
+      .exp-bullets li {
+        margin-bottom: 3px;
+        font-size: 10.5px;
+        color: #2a2a2a;
+        line-height: 1.5;
+      }
+      .exp-bullets li:last-child {
+        margin-bottom: 0;
+      }
+
+      /* ── Education ── */
+      .edu-stack {
+        display: grid;
+        gap: 10px;
+      }
+      .edu-entry {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .edu-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 10px;
+      }
+      .edu-institution {
+        margin: 0;
+        font-size: 11.5px;
+        font-weight: 700;
+        color: #111111;
+      }
+      .edu-years {
+        flex-shrink: 0;
+        font-size: 10px;
+        font-weight: 600;
+        color: #555555;
+        white-space: nowrap;
+        letter-spacing: 0.04em;
+      }
+      .edu-credential {
+        margin: 2px 0 0;
+        font-size: 10.5px;
+        color: #444444;
+        font-style: italic;
+      }
+      .edu-note {
+        margin: 3px 0 0;
+        font-size: 10px;
+        color: #666666;
+      }
+
+      /* ── Languages ── */
+      .lang-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 22px;
+      }
+      .lang-item {
+        font-size: 10.5px;
+        color: #1a1a1a;
+      }
+      .lang-level {
+        margin-left: 6px;
+        font-size: 9.5px;
+        color: #666666;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+
       @media print {
-        html,
-        body {
+        html, body {
           background: #ffffff;
-        }
-        .sheet {
-          border: none;
-          border-radius: 0;
-          box-shadow: none;
         }
       }
     </style>
   </head>
   <body>
-    <article class="sheet">
-      ${headerMarkup}
-      <main class="content">
-        ${contentMarkup}
-      </main>
-    </article>
+    ${headerMarkup}
+    <main>
+      ${contentMarkup}
+    </main>
   </body>
 </html>`;
 }
