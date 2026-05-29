@@ -1,0 +1,58 @@
+name: ci-cd
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: resume-builder-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci --omit=dev
+
+      - name: Validate source compiles
+        run: node --check server.js
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Trust deploy host
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy on server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_REF: ${{ github.sha }}
+        run: |
+          ssh "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -s" <<EOF
+          set -e
+          cd "${DEPLOY_PATH}"
+          git fetch --all --prune
+          git checkout "${DEPLOY_REF}"
+          docker compose up -d --build --remove-orphans
+          docker image prune -f
+          EOF
